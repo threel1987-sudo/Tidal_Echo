@@ -1047,6 +1047,28 @@
   .config-row{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
   .config-row input{ min-width:0; }
   .config-check{ display:flex; align-items:center; gap:6px; color:var(--text-soft); font-size:12px; white-space:nowrap; }
+  .config-hub{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .config-entry{ display:flex; align-items:center; gap:10px; min-width:0; padding:13px; border:1px solid var(--card-line); border-radius:10px; background:var(--field-bg); color:var(--text); cursor:pointer; text-align:left; font:inherit; }
+  .config-entry svg{ width:20px; height:20px; flex:0 0 auto; color:var(--accent); }
+  .config-entry-copy{ min-width:0; display:grid; gap:3px; }
+  .config-entry-copy strong{ font-size:13px; font-weight:650; }
+  .config-entry-copy span{ overflow:hidden; color:var(--text-soft); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+  .config-view{ display:none; gap:12px; }
+  .config-view.active{ display:grid; }
+  .config-view-head{ display:flex; align-items:center; gap:10px; }
+  .config-view-back{ width:30px; height:30px; padding:0; border:1px solid var(--card-line); border-radius:50%; background:var(--seg-track); color:var(--text); cursor:pointer; }
+  .config-view-title{ display:grid; gap:2px; }
+  .config-view-title strong{ font-size:15px; }
+  .config-view-title span{ color:var(--text-soft); font-size:11px; }
+  .mcp-list{ display:grid; gap:9px; }
+  .mcp-item{ display:grid; gap:9px; padding:12px; border:1px solid var(--card-line); border-radius:10px; background:var(--field-bg); }
+  .mcp-item-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .mcp-item-name{ min-width:0; overflow:hidden; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+  .mcp-item-url{ overflow:hidden; color:var(--text-soft); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+  .mcp-item-actions{ display:flex; align-items:center; gap:6px; }
+  .mcp-icon-btn{ width:28px; height:28px; padding:0; border:1px solid var(--card-line); border-radius:8px; background:var(--seg-track); color:var(--text); cursor:pointer; }
+  .mcp-icon-btn.danger{ color:#d85b50; }
+  @media (max-width:520px){ .config-hub{ grid-template-columns:1fr; } }
 
   /* segmented control */
   .segmented{
@@ -1989,8 +2011,22 @@
         <div class="push-hint" id="brainHint"></div>
       </section>
 
-      <section class="settings-card">
-        <div class="settings-label">第三方 API <i class="info-i" title="填写 OpenAI 兼容接口的地址、Key 和模型；Key 只用于服务器调用并在页面回显时脱敏">i</i></div>
+      <section class="settings-card" id="configHubView">
+        <div class="settings-label">连接与工具</div>
+        <div class="config-hub">
+          <button class="config-entry" id="openApiConfigBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="8.5"/></svg>
+            <span class="config-entry-copy"><strong>AI API</strong><span id="apiEntryStatus">配置模型连接</span></span>
+          </button>
+          <button class="config-entry" id="openMcpConfigBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M5 9h14v4a7 7 0 0 1-14 0z"/><path d="M12 20v-4"/></svg>
+            <span class="config-entry-copy"><strong>MCP 工具</strong><span id="mcpEntryStatus">管理工具服务</span></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="settings-card config-view" id="apiConfigView">
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>AI API</strong><span>配置第三方 OpenAI 兼容接口</span></div></div>
         <div class="config-fields" id="apiConfigFields">
           <input id="apiUrlInput" type="url" placeholder="API 地址，例如 https://api.example.com/v1" autocomplete="url">
           <input id="apiKeyInput" type="password" placeholder="API Key（留空表示保持原 Key）" autocomplete="off">
@@ -2000,15 +2036,16 @@
         <div class="push-hint" id="apiConfigHint"></div>
       </section>
 
-      <section class="settings-card">
-        <div class="settings-label">MCP 工具接入 <i class="info-i" title="填写支持 Streamable HTTP 或 JSON-RPC tools/list、tools/call 的 MCP Server 地址">i</i></div>
+      <section class="settings-card config-view" id="mcpConfigView">
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>MCP 工具</strong><span>逐个管理服务与启用状态</span></div></div>
+        <div class="mcp-list" id="mcpList"></div>
         <div class="config-fields" id="mcpConfigFields">
           <input id="mcpNameInput" type="text" placeholder="服务名称，例如 tools" autocomplete="off">
           <input id="mcpUrlInput" type="url" placeholder="MCP Server URL" autocomplete="url">
           <input id="mcpTokenInput" type="password" placeholder="鉴权 Token（可选）" autocomplete="off">
           <label class="config-check"><input id="mcpEnabledInput" type="checkbox" checked>启用 MCP 工具</label>
         </div>
-        <div class="config-actions"><button class="config-action primary" id="mcpSaveBtn" type="button">保存 MCP 配置</button></div>
+        <div class="config-actions"><button class="config-action primary" id="mcpSaveBtn" type="button">添加 MCP 服务</button></div>
         <div class="push-hint" id="mcpConfigHint"></div>
       </section>
 
