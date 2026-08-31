@@ -1068,6 +1068,9 @@
   .mcp-item-actions{ display:flex; align-items:center; gap:6px; }
   .mcp-icon-btn{ width:28px; height:28px; padding:0; border:1px solid var(--card-line); border-radius:8px; background:var(--seg-track); color:var(--text); cursor:pointer; }
   .mcp-icon-btn.danger{ color:#d85b50; }
+  .mcp-item-status{ color:var(--text-soft); font-size:11px; }
+  .mcp-item-status.enabled{ color:var(--accent); }
+  .mcp-item-status.disabled{ color:var(--text-faint); }
   @media (max-width:520px){ .config-hub{ grid-template-columns:1fr; } }
 
   /* segmented control */
@@ -2357,6 +2360,9 @@ const terminalBtn = $("#terminalBtn"), terminalPanel = $("#terminalPanel"), term
 const brainSeg = $("#brainSeg"), brainHint = $("#brainHint");
 const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiSaveBtn = $("#apiSaveBtn"), apiConfigHint = $("#apiConfigHint");
 const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpConfigHint = $("#mcpConfigHint");
+const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), mcpList = $("#mcpList");
+const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
+let editingMcpIndex = null;
 
 /* ════════ 固定聊天背景 + 本地头像 ════════ */
 const THEMES = ["light","harbor"];
@@ -3273,6 +3279,73 @@ if (brainSeg){
 }
 
 let savedLoopConfig = null;
+function setConfigView(view){
+  if (!configHubView || !apiConfigView || !mcpConfigView) return;
+  configHubView.classList.toggle("hidden", view !== "hub");
+  apiConfigView.classList.toggle("active", view === "api");
+  mcpConfigView.classList.toggle("active", view === "mcp");
+}
+function resetMcpForm(){
+  editingMcpIndex = null;
+  if (mcpNameInput) mcpNameInput.value = "";
+  if (mcpUrlInput) mcpUrlInput.value = "";
+  if (mcpTokenInput) mcpTokenInput.value = "";
+  if (mcpEnabledInput) mcpEnabledInput.checked = true;
+  if (mcpSaveBtn) mcpSaveBtn.textContent = "添加 MCP 服务";
+}
+function updateConfigEntryStatus(){
+  const route = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
+  const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers : [];
+  if (apiEntryStatus) apiEntryStatus.textContent = route.url && route.model ? `${route.model} · ${route.url}` : "配置模型连接";
+  if (mcpEntryStatus) mcpEntryStatus.textContent = servers.length ? `${servers.length} 个服务 · ${servers.filter(s => s.enabled !== false).length} 个启用` : "管理工具服务";
+}
+function renderMcpList(){
+  if (!mcpList) return;
+  const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers : [];
+  mcpList.textContent = "";
+  servers.forEach((server, position) => {
+    const item = document.createElement("div");
+    item.className = "mcp-item";
+    const head = document.createElement("div");
+    head.className = "mcp-item-head";
+    const name = document.createElement("strong");
+    name.className = "mcp-item-name";
+    name.textContent = server.name || `server-${position + 1}`;
+    const status = document.createElement("span");
+    status.className = `mcp-item-status ${server.enabled === false ? "disabled" : "enabled"}`;
+    status.textContent = server.enabled === false ? "已停用" : "已启用";
+    head.append(name, status);
+    const url = document.createElement("div");
+    url.className = "mcp-item-url";
+    url.textContent = server.url || "";
+    const actions = document.createElement("div");
+    actions.className = "mcp-item-actions";
+    const toggle = document.createElement("button");
+    toggle.className = "mcp-icon-btn";
+    toggle.type = "button";
+    toggle.title = server.enabled === false ? "启用" : "停用";
+    toggle.textContent = server.enabled === false ? "启" : "停";
+    toggle.dataset.mcpAction = "toggle";
+    const edit = document.createElement("button");
+    edit.className = "mcp-icon-btn";
+    edit.type = "button";
+    edit.title = "编辑";
+    edit.textContent = "改";
+    edit.dataset.mcpAction = "edit";
+    const remove = document.createElement("button");
+    remove.className = "mcp-icon-btn danger";
+    remove.type = "button";
+    remove.title = "删除";
+    remove.textContent = "删";
+    remove.dataset.mcpAction = "delete";
+    [toggle, edit, remove].forEach(button => { button.dataset.mcpPosition = position; actions.appendChild(button); });
+    item.append(head, url, actions);
+    mcpList.appendChild(item);
+  });
+}
+function mcpPayload(servers){
+  return servers.map((server, position) => ({ index: Number.isInteger(server.index) ? server.index : position, name: server.name || "tools", url: server.url || "", token: "", enabled: server.enabled !== false }));
+}
 async function loadLoopConfig(){
   if (USE_MOCK || !secret) return;
   try{
@@ -3282,34 +3355,67 @@ async function loadLoopConfig(){
     const route = (savedLoopConfig.main_chain || [])[0] || {};
     if (apiUrlInput) apiUrlInput.value = route.url || "";
     if (apiModelInput) apiModelInput.value = route.model || "";
-    const mcp = (savedLoopConfig.mcp_servers || [])[0] || {};
-    if (mcpNameInput) mcpNameInput.value = mcp.name || "tools";
-    if (mcpUrlInput) mcpUrlInput.value = mcp.url || "";
-    if (mcpEnabledInput) mcpEnabledInput.checked = mcp.enabled !== false;
+    if (apiKeyInput) apiKeyInput.value = "";
     if (apiConfigHint) apiConfigHint.textContent = route.key_masked ? `已配置 Key：${route.key_masked}` : "尚未配置 API";
-    if (mcpConfigHint) mcpConfigHint.textContent = mcp.token_masked ? `已配置 Token：${mcp.token_masked}` : "MCP Token 可选";
+    if (mcpConfigHint) mcpConfigHint.textContent = "MCP Token 仅在输入时更新，留空保持原 Token";
+    resetMcpForm();
+    renderMcpList();
+    updateConfigEntryStatus();
   }catch(_){
     if (apiConfigHint) apiConfigHint.textContent = "暂时无法读取 API 配置";
   }
 }
 async function saveLoopConfig(payload, hint){
-  if (USE_MOCK) return;
+  if (USE_MOCK || !secret) return;
   try{
     const r = await fetch(`${API_BASE}/app/loop_config`, { method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" }, body:JSON.stringify(payload) });
     if (!r.ok) throw new Error("save " + r.status);
     savedLoopConfig = await r.json();
     if (hint) hint.textContent = "已保存，切换到 API 后生效";
+    renderMcpList();
+    updateConfigEntryStatus();
     loadLoopConfig();
   }catch(_){ if (hint) hint.textContent = "保存失败，请检查连接"; }
 }
+if (openApiConfigBtn) openApiConfigBtn.addEventListener("click", () => setConfigView("api"));
+if (openMcpConfigBtn) openMcpConfigBtn.addEventListener("click", () => setConfigView("mcp"));
+document.querySelectorAll("[data-config-back]").forEach(button => button.addEventListener("click", () => setConfigView("hub")));
 if (apiSaveBtn) apiSaveBtn.addEventListener("click", () => {
   const old = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
   saveLoopConfig({ main_chain:[{ index:0, url:apiUrlInput.value.trim(), key:apiKeyInput.value, model:apiModelInput.value.trim() || old.model }] }, apiConfigHint);
 });
 if (mcpSaveBtn) mcpSaveBtn.addEventListener("click", () => {
-  const old = (savedLoopConfig && savedLoopConfig.mcp_servers || [])[0] || {};
-  saveLoopConfig({ mcp_servers: mcpUrlInput.value.trim() ? [{ index:0, name:mcpNameInput.value.trim() || "tools", url:mcpUrlInput.value.trim(), token:mcpTokenInput.value, enabled:mcpEnabledInput.checked }] : [] }, mcpConfigHint);
+  const url = mcpUrlInput.value.trim();
+  if (!url){ if (mcpConfigHint) mcpConfigHint.textContent = "请输入 MCP Server URL"; return; }
+  const current = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers.slice() : [];
+  const entry = { index: editingMcpIndex === null ? current.length : editingMcpIndex, name:mcpNameInput.value.trim() || "tools", url, token:mcpTokenInput.value, enabled:mcpEnabledInput.checked };
+  const position = editingMcpIndex === null ? -1 : current.findIndex(server => server.index === editingMcpIndex);
+  if (position >= 0) current[position] = entry; else current.push(entry);
+  saveLoopConfig({ mcp_servers: mcpPayload(current).map((server, index) => ({ ...server, token: index === (position >= 0 ? position : current.length - 1) ? entry.token : "" })) }, mcpConfigHint);
 });
+if (mcpList) mcpList.addEventListener("click", event => {
+  const button = event.target.closest("button[data-mcp-action]");
+  if (!button) return;
+  const position = Number(button.dataset.mcpPosition);
+  const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers.slice() : [];
+  const server = servers[position];
+  if (!server) return;
+  if (button.dataset.mcpAction === "edit"){
+    editingMcpIndex = server.index;
+    mcpNameInput.value = server.name || "";
+    mcpUrlInput.value = server.url || "";
+    mcpTokenInput.value = "";
+    mcpEnabledInput.checked = server.enabled !== false;
+    mcpSaveBtn.textContent = "保存 MCP 服务";
+    mcpUrlInput.focus();
+  }else if (button.dataset.mcpAction === "delete"){
+    saveLoopConfig({ mcp_servers: mcpPayload(servers.filter((_, index) => index !== position)) }, mcpConfigHint);
+  }else if (button.dataset.mcpAction === "toggle"){
+    servers[position] = { ...server, enabled: server.enabled === false };
+    saveLoopConfig({ mcp_servers: mcpPayload(servers) }, mcpConfigHint);
+  }
+});
+setConfigView("hub");
 loadLoopConfig();
 
 function shortSid(sid){
