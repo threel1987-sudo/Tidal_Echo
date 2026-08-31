@@ -364,14 +364,72 @@ async def stream_chat(route: dict[str, str], messages: list[dict[str, str]], sin
     return {"text": "".join(text_parts).strip(), "usage": usage}
 
 
+MCP_SESSIONS: dict[str, str] = {}
+MCP_REQUEST_ID = 0
+
+
+def mcp_next_id() -> int:
+    global MCP_REQUEST_ID
+    MCP_REQUEST_ID += 1
+    return MCP_REQUEST_ID
+
+
+def mcp_response_body(resp: httpx.Response) -> dict[str, Any]:
+    content_type = resp.headers.get("content-type", "")
+    if "text/event-stream" not in content_type:
+        data = resp.json()
+        if isinstance(data, dict):
+            return data
+        raise RuntimeError("MCP returned a non-object response")
+    events = []
+    for line in resp.text.splitlines():
+        if line.startswith("data:"):
+            raw = line[5:].strip()
+            if raw:
+                events.append(json.loads(raw))
+    if not events:
+        raise RuntimeError("MCP returned an empty event stream")
+    return events[-1]
+
+
 async def mcp_call(server: dict[str, Any], method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    headers = {"Content-Type": "application/json"}
+    url = server["url"]
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+    }
     if server.get("token"):
         headers["Authorization"] = f"Bearer {server['token']}"
     async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
-        resp = await client.post(server["url"], headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}})
+        if method != "initialize" and url not in MCP_SESSIONS:
+            initialize = {
+                "jsonrpc": "2.0",
+                "id": mcp_next_id(),
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "relay-ai-chat", "version": "1.0.0"},
+                },
+            }
+            init_resp = await client.post(url, headers=headers, json=initialize)
+            if init_resp.status_code < 300:
+                init_data = mcp_response_body(init_resp)
+                if init_data.get("error"):
+                    raise RuntimeError(str(init_data["error"]))
+                session_id = init_resp.headers.get("mcp-session-id")
+                if session_id:
+                    MCP_SESSIONS[url] = session_id
+                notify_headers = dict(headers)
+                if session_id:
+                    notify_headers["Mcp-Session-Id"] = session_id
+                await client.post(url, headers=notify_headers, json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        if url in MCP_SESSIONS:
+            headers["Mcp-Session-Id"] = MCP_SESSIONS[url]
+        request = {"jsonrpc": "2.0", "id": mcp_next_id(), "method": method, "params": params or {}}
+        resp = await client.post(url, headers=headers, json=request)
     resp.raise_for_status()
-    data = resp.json()
+    data = mcp_response_body(resp)
     if data.get("error"):
         raise RuntimeError(str(data["error"]))
     return data.get("result") or {}
