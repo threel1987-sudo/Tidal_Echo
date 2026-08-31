@@ -490,7 +490,8 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     for route in main_chain():
         tried.append(route.get("model"))
         try:
-            if emit_stream and STREAM_OUTPUT and not mcp_servers():
+            tools = await mcp_tools()
+            if emit_stream and STREAM_OUTPUT and not tools:
                 async def sink(chunk: str) -> None:
                     await relay_out({
                         "type": "reply_delta",
@@ -501,27 +502,43 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     })
                 out = await stream_chat(route, messages, sink)
             else:
-                tools = await mcp_tools()
-                for _ in range(8):
-                    out = await complete_chat(route, messages, tools)
-                    msg = out.get("message") or {}
-                    calls = msg.get("tool_calls") or []
-                    if not calls and isinstance(msg.get("function_call"), dict):
-                        calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
-                    if not calls:
-                        break
-                    messages.append(msg)
-                    for call in calls:
-                        fn = call.get("function") or {}
-                        try:
-                            args = json.loads(fn.get("arguments") or "{}")
-                            result = await execute_mcp_tool(str(fn.get("name") or ""), args)
-                            content = json.dumps(result, ensure_ascii=False)
-                        except Exception as exc:
-                            content = json.dumps({"error": str(exc)}, ensure_ascii=False)
-                        messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
-                else:
-                    out = {"text": "", "usage": {}}
+                base_messages = messages[:]
+                try:
+                    for _ in range(8):
+                        out = await complete_chat(route, messages, tools)
+                        msg = out.get("message") or {}
+                        calls = msg.get("tool_calls") or []
+                        if not calls and isinstance(msg.get("function_call"), dict):
+                            calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
+                        if not calls:
+                            break
+                        messages.append(msg)
+                        for call in calls:
+                            fn = call.get("function") or {}
+                            try:
+                                args = json.loads(fn.get("arguments") or "{}")
+                                result = await execute_mcp_tool(str(fn.get("name") or ""), args)
+                                content = json.dumps(result, ensure_ascii=False)
+                            except Exception as exc:
+                                content = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                            messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
+                    else:
+                        out = {"text": "", "usage": {}}
+                except HTTPException as exc:
+                    if not tools or exc.status_code not in {400, 404, 405, 422}:
+                        raise
+                    if emit_stream and STREAM_OUTPUT:
+                        async def sink(chunk: str) -> None:
+                            await relay_out({
+                                "type": "reply_delta",
+                                "stream_id": stream_id,
+                                "text": chunk,
+                                "done": False,
+                                "api_session": session_id,
+                            })
+                        out = await stream_chat(route, base_messages, sink)
+                    else:
+                        out = await complete_chat(route, base_messages)
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
