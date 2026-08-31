@@ -557,7 +557,8 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
     out = await run_model(messages, stream_id=stream_id, session_id=session_id, emit_stream=not dry)
     reply = (out.get("text") or "").strip()
     if not reply:
-        reply = "(The API loop did not produce a reply.)"
+        error = str(out.get("error") or "").strip()
+        reply = f"API 调用失败：{error}" if error else "API 未返回回复内容。"
     meta = {
         "runtime": "api_loop",
         "model": out.get("model"),

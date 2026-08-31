@@ -86,6 +86,7 @@ PRESENCE_RECENT_SEC = int(os.environ.get("RELAY_PRESENCE_RECENT_SEC", "1800"))
 # "desktop" keeps the original Claude Code channel path. "loop" forwards new
 # human messages to a local HTTP loop, which replies through /channel/out.
 BRAIN_FILE = Path(os.environ.get("RELAY_BRAIN_FILE", str(Path(__file__).parent / "brain_target")))
+DEFAULT_BRAIN = os.environ.get("RELAY_DEFAULT_BRAIN", "desktop").strip().lower()
 LOOP_INGEST_URL = os.environ.get("RELAY_LOOP_INGEST_URL", "http://127.0.0.1:3020/loop/ingest")
 STREAM_DRAFT_TTL = int(os.environ.get("RELAY_STREAM_DRAFT_TTL", "600"))
 
@@ -351,13 +352,14 @@ def plugin_payload(msg: dict) -> dict:
 
 
 def brain_target() -> str:
+    fallback = DEFAULT_BRAIN if DEFAULT_BRAIN in ("desktop", "loop") else "desktop"
     try:
         target = BRAIN_FILE.read_text(encoding="utf-8").strip()
-        return target if target in ("desktop", "loop") else "desktop"
+        return target if target in ("desktop", "loop") else fallback
     except FileNotFoundError:
-        return "desktop"
+        return fallback
     except Exception:
-        return "desktop"
+        return fallback
 
 
 def _forward_to_loop_sync(msg: dict) -> None:
