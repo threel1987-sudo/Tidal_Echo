@@ -235,6 +235,17 @@ def build_messages(text: str, *, before_id: int | None = None, session_id: str =
     return messages
 
 
+def mcp_servers() -> list[dict[str, Any]]:
+    rows = load_config().get("mcp_servers")
+    if not isinstance(rows, list):
+        return []
+    return [
+        {"name": str(r.get("name") or "server"), "url": str(r.get("url") or "").rstrip("/"),
+         "token": str(r.get("token") or ""), "enabled": bool(r.get("enabled", True))}
+        for r in rows if isinstance(r, dict) and r.get("url")
+    ]
+
+
 def public_config() -> dict[str, Any]:
     return {
         "history_n": history_n(),
@@ -243,6 +254,10 @@ def public_config() -> dict[str, Any]:
         "main_chain": [
             {"index": i, "model": r.get("model", ""), "url": r.get("url", ""), "key_masked": mask_key(r.get("key", ""))}
             for i, r in enumerate(main_chain())
+        ],
+        "mcp_servers": [
+            {"index": i, "name": r["name"], "url": r["url"], "token_masked": mask_key(r["token"]), "enabled": r["enabled"]}
+            for i, r in enumerate(mcp_servers())
         ],
     }
 
@@ -269,6 +284,24 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
             new_chain.append(entry)
         if new_chain:
             cfg["main_chain"] = new_chain
+    if isinstance(body.get("mcp_servers"), list):
+        old = mcp_servers()
+        new_servers = []
+        for pos, item in enumerate(body["mcp_servers"]):
+            if not isinstance(item, dict):
+                continue
+            old_idx = int(item.get("index", pos) or 0)
+            prev = old[old_idx] if 0 <= old_idx < len(old) else {}
+            entry = {
+                "name": str(item.get("name") or prev.get("name") or f"server-{pos + 1}").strip(),
+                "url": str(item.get("url") or prev.get("url") or "").strip().rstrip("/"),
+                "token": str(item.get("token") or prev.get("token") or ""),
+                "enabled": bool(item.get("enabled", prev.get("enabled", True))),
+            }
+            if not entry["url"]:
+                raise HTTPException(status_code=400, detail=f"MCP row {pos + 1}: url required")
+            new_servers.append(entry)
+        cfg["mcp_servers"] = new_servers
     save_config(cfg)
     return public_config()
 
@@ -330,7 +363,35 @@ async def stream_chat(route: dict[str, str], messages: list[dict[str, str]], sin
     return {"text": "".join(text_parts).strip(), "usage": usage}
 
 
-async def complete_chat(route: dict[str, str], messages: list[dict[str, str]]) -> dict[str, Any]:
+async def mcp_call(server: dict[str, Any], method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    headers = {"Content-Type": "application/json"}
+    if server.get("token"):
+        headers["Authorization"] = f"Bearer {server['token']}"
+    async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
+        resp = await client.post(server["url"], headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}})
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("error"):
+        raise RuntimeError(str(data["error"]))
+    return data.get("result") or {}
+
+
+async def mcp_tools() -> list[dict[str, Any]]:
+    tools = []
+    for server in mcp_servers():
+        if not server["enabled"]:
+            continue
+        try:
+            result = await mcp_call(server, "tools/list")
+            for tool in result.get("tools", []):
+                if isinstance(tool, dict) and tool.get("name"):
+                    tools.append({"type": "function", "function": {"name": f"mcp_{server['name']}_{tool['name']}", "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
+        except Exception:
+            continue
+    return tools
+
+
+async def complete_chat(route: dict[str, str], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     body = {
         "model": route["model"],
         "messages": messages,
@@ -338,6 +399,9 @@ async def complete_chat(route: dict[str, str], messages: list[dict[str, str]]) -
         "max_tokens": MAX_TOKENS,
         "stream": False,
     }
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = "auto"
     async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
         resp = await client.post(
             route["url"].rstrip("/") + "/chat/completions",
@@ -349,16 +413,24 @@ async def complete_chat(route: dict[str, str], messages: list[dict[str, str]]) -
     resp.raise_for_status()
     data = resp.json()
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
-    return {"text": (msg.get("content") or "").strip(), "usage": data.get("usage") or {}}
+    return {"text": (msg.get("content") or "").strip(), "message": msg, "usage": data.get("usage") or {}}
 
 
-async def run_model(messages: list[dict[str, str]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False) -> dict[str, Any]:
+async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    prefix, name = tool_name.split("_", 2)[1:]
+    for server in mcp_servers():
+        if server["enabled"] and server["name"] == prefix:
+            return await mcp_call(server, "tools/call", {"name": name, "arguments": arguments})
+    raise RuntimeError("MCP tool is not configured")
+
+
+async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False) -> dict[str, Any]:
     tried = []
     last_error = ""
     for route in main_chain():
         tried.append(route.get("model"))
         try:
-            if emit_stream and STREAM_OUTPUT:
+            if emit_stream and STREAM_OUTPUT and not mcp_servers():
                 async def sink(chunk: str) -> None:
                     await relay_out({
                         "type": "reply_delta",
@@ -369,7 +441,25 @@ async def run_model(messages: list[dict[str, str]], *, stream_id: str = "", sess
                     })
                 out = await stream_chat(route, messages, sink)
             else:
-                out = await complete_chat(route, messages)
+                tools = await mcp_tools()
+                for _ in range(8):
+                    out = await complete_chat(route, messages, tools)
+                    msg = out.get("message") or {}
+                    calls = msg.get("tool_calls") or []
+                    if not calls:
+                        break
+                    messages.append(msg)
+                    for call in calls:
+                        fn = call.get("function") or {}
+                        try:
+                            args = json.loads(fn.get("arguments") or "{}")
+                            result = await execute_mcp_tool(str(fn.get("name") or ""), args)
+                            content = json.dumps(result, ensure_ascii=False)
+                        except Exception as exc:
+                            content = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                        messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
+                else:
+                    out = {"text": "", "usage": {}}
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out

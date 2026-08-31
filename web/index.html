@@ -1038,6 +1038,15 @@
     margin-top:9px; font-size:11.5px; line-height:1.55;
     color: var(--text-faint); letter-spacing:.01em;
   }
+  .config-fields{ display:grid; gap:9px; }
+  .config-fields input{ width:100%; min-width:0; border:1px solid var(--field-line); border-radius:10px; padding:9px 10px; background:var(--field-bg); color:var(--text); font:inherit; font-size:12px; outline:none; }
+  .config-fields input:focus{ border-color:var(--accent); }
+  .config-actions{ display:flex; gap:8px; margin-top:10px; }
+  .config-action{ flex:1; border:1px solid var(--card-line); border-radius:10px; padding:8px; background:var(--seg-track); color:var(--text); font:inherit; font-size:12px; cursor:pointer; }
+  .config-action.primary{ background:var(--send-bg); color:var(--accent-fg); }
+  .config-row{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+  .config-row input{ min-width:0; }
+  .config-check{ display:flex; align-items:center; gap:6px; color:var(--text-soft); font-size:12px; white-space:nowrap; }
 
   /* segmented control */
   .segmented{
@@ -1980,6 +1989,29 @@
         <div class="push-hint" id="brainHint"></div>
       </section>
 
+      <section class="settings-card">
+        <div class="settings-label">第三方 API <i class="info-i" title="填写 OpenAI 兼容接口的地址、Key 和模型；Key 只用于服务器调用并在页面回显时脱敏">i</i></div>
+        <div class="config-fields" id="apiConfigFields">
+          <input id="apiUrlInput" type="url" placeholder="API 地址，例如 https://api.example.com/v1" autocomplete="url">
+          <input id="apiKeyInput" type="password" placeholder="API Key（留空表示保持原 Key）" autocomplete="off">
+          <input id="apiModelInput" type="text" placeholder="模型名称，例如 gpt-4o" autocomplete="off">
+        </div>
+        <div class="config-actions"><button class="config-action primary" id="apiSaveBtn" type="button">保存 API 配置</button></div>
+        <div class="push-hint" id="apiConfigHint"></div>
+      </section>
+
+      <section class="settings-card">
+        <div class="settings-label">MCP 工具接入 <i class="info-i" title="填写支持 Streamable HTTP 或 JSON-RPC tools/list、tools/call 的 MCP Server 地址">i</i></div>
+        <div class="config-fields" id="mcpConfigFields">
+          <input id="mcpNameInput" type="text" placeholder="服务名称，例如 tools" autocomplete="off">
+          <input id="mcpUrlInput" type="url" placeholder="MCP Server URL" autocomplete="url">
+          <input id="mcpTokenInput" type="password" placeholder="鉴权 Token（可选）" autocomplete="off">
+          <label class="config-check"><input id="mcpEnabledInput" type="checkbox" checked>启用 MCP 工具</label>
+        </div>
+        <div class="config-actions"><button class="config-action primary" id="mcpSaveBtn" type="button">保存 MCP 配置</button></div>
+        <div class="push-hint" id="mcpConfigHint"></div>
+      </section>
+
       <!-- 模型选择（占位 · 假按键，以后接真切换）-->
       <section class="settings-card">
         <div class="settings-label">模型选择</div>
@@ -2286,6 +2318,8 @@ const statusCopy = $("#statusCopy"), statusSidEl = $("#statusSid"), statusUsedEl
 const sessionBtn = $("#sessionBtn"), sessionPop = $("#sessionPop"), sessionList = $("#sessionList"), sessionNewBtn = $("#sessionNewBtn");
 const terminalBtn = $("#terminalBtn"), terminalPanel = $("#terminalPanel"), terminalBack = $("#terminalBack"), terminalLog = $("#terminalLog"), terminalForm = $("#terminalForm"), terminalInput = $("#terminalInput"), terminalSession = $("#terminalSession");
 const brainSeg = $("#brainSeg"), brainHint = $("#brainHint");
+const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiSaveBtn = $("#apiSaveBtn"), apiConfigHint = $("#apiConfigHint");
+const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpConfigHint = $("#mcpConfigHint");
 
 /* ════════ 固定聊天背景 + 本地头像 ════════ */
 const THEMES = ["light","harbor"];
@@ -3200,6 +3234,46 @@ if (brainSeg){
     if (b) saveBrain(b.dataset.val);
   });
 }
+
+let savedLoopConfig = null;
+async function loadLoopConfig(){
+  if (USE_MOCK || !secret) return;
+  try{
+    const r = await fetch(`${API_BASE}/app/loop_config`, { headers: authHeaders() });
+    if (!r.ok) throw new Error("config " + r.status);
+    savedLoopConfig = await r.json();
+    const route = (savedLoopConfig.main_chain || [])[0] || {};
+    if (apiUrlInput) apiUrlInput.value = route.url || "";
+    if (apiModelInput) apiModelInput.value = route.model || "";
+    const mcp = (savedLoopConfig.mcp_servers || [])[0] || {};
+    if (mcpNameInput) mcpNameInput.value = mcp.name || "tools";
+    if (mcpUrlInput) mcpUrlInput.value = mcp.url || "";
+    if (mcpEnabledInput) mcpEnabledInput.checked = mcp.enabled !== false;
+    if (apiConfigHint) apiConfigHint.textContent = route.key_masked ? `已配置 Key：${route.key_masked}` : "尚未配置 API";
+    if (mcpConfigHint) mcpConfigHint.textContent = mcp.token_masked ? `已配置 Token：${mcp.token_masked}` : "MCP Token 可选";
+  }catch(_){
+    if (apiConfigHint) apiConfigHint.textContent = "暂时无法读取 API 配置";
+  }
+}
+async function saveLoopConfig(payload, hint){
+  if (USE_MOCK) return;
+  try{
+    const r = await fetch(`${API_BASE}/app/loop_config`, { method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" }, body:JSON.stringify(payload) });
+    if (!r.ok) throw new Error("save " + r.status);
+    savedLoopConfig = await r.json();
+    if (hint) hint.textContent = "已保存，切换到 API 后生效";
+    loadLoopConfig();
+  }catch(_){ if (hint) hint.textContent = "保存失败，请检查连接"; }
+}
+if (apiSaveBtn) apiSaveBtn.addEventListener("click", () => {
+  const old = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
+  saveLoopConfig({ main_chain:[{ index:0, url:apiUrlInput.value.trim(), key:apiKeyInput.value, model:apiModelInput.value.trim() || old.model }] }, apiConfigHint);
+});
+if (mcpSaveBtn) mcpSaveBtn.addEventListener("click", () => {
+  const old = (savedLoopConfig && savedLoopConfig.mcp_servers || [])[0] || {};
+  saveLoopConfig({ mcp_servers: mcpUrlInput.value.trim() ? [{ index:0, name:mcpNameInput.value.trim() || "tools", url:mcpUrlInput.value.trim(), token:mcpTokenInput.value, enabled:mcpEnabledInput.checked }] : [] }, mcpConfigHint);
+});
+loadLoopConfig();
 
 function shortSid(sid){
   if (!sid) return "(none)";
@@ -5557,7 +5631,10 @@ $("#loginForm").addEventListener("submit", async (e) => {
     // 用 history 验证密钥(401 会抛错)
     await loadSessions();
     loadBrain();
-    const msgs = await apiLatestHistory();
+    loadLoopConfig();
+    const msgs = await apiLatestHistory();","}ર્ય? }алақь Haj? rhandza sop? nope.ileswi. ажәлар? " 
+    			
+		: "
     localStorage.setItem(LS_KEY, secret);
     startChat(msgs);
   }catch(err){
