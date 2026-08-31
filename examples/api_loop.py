@@ -223,7 +223,8 @@ def relay_rows(before_id: int | None, session_id: str, limit: int) -> list[dict[
 
 
 def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True) -> list[dict[str, str]]:
-    messages = [{"role": "system", "content": PERSONA}]
+    tool_hint = " When a configured MCP tool can provide current, external, or actionable information, use it before answering."
+    messages = [{"role": "system", "content": PERSONA + tool_hint}]
     if use_context:
         for row in relay_rows(before_id, session_id, history_n()):
             content = str(row.get("text") or "").strip()
@@ -417,9 +418,10 @@ async def complete_chat(route: dict[str, str], messages: list[dict[str, Any]], t
 
 
 async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    prefix, name = tool_name.split("_", 2)[1:]
     for server in mcp_servers():
-        if server["enabled"] and server["name"] == prefix:
+        prefix = f"mcp_{server['name']}_"
+        if server["enabled"] and tool_name.startswith(prefix):
+            name = tool_name[len(prefix):]
             return await mcp_call(server, "tools/call", {"name": name, "arguments": arguments})
     raise RuntimeError("MCP tool is not configured")
 
@@ -446,6 +448,8 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     out = await complete_chat(route, messages, tools)
                     msg = out.get("message") or {}
                     calls = msg.get("tool_calls") or []
+                    if not calls and isinstance(msg.get("function_call"), dict):
+                        calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
                     if not calls:
                         break
                     messages.append(msg)
@@ -510,6 +514,8 @@ async def healthz():
     return {
         "ok": True,
         "models": [r.get("model") for r in main_chain()],
+        "mcp_servers": [{"name": s["name"], "url": s["url"], "enabled": s["enabled"]} for s in mcp_servers()],
+        "mcp_tools": len(await mcp_tools()),
         "history_n": history_n(),
         "relay_db": RELAY_DB,
         "relay_secret_loaded": bool(RELAY_SECRET),
