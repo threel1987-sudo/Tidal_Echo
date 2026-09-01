@@ -1041,6 +1041,9 @@
   .config-fields{ display:grid; gap:9px; }
   .config-fields input{ width:100%; min-width:0; border:1px solid var(--field-line); border-radius:10px; padding:9px 10px; background:var(--field-bg); color:var(--text); font:inherit; font-size:12px; outline:none; }
   .config-fields input:focus{ border-color:var(--accent); }
+  .config-field-label{ font-size:11px; color:var(--text-faint); padding:4px 0 0; line-height:1.4; }
+  .config-textarea{ width:100%; min-width:0; border:1px solid var(--field-line); border-radius:10px; padding:9px 10px; background:var(--field-bg); color:var(--text); font:inherit; font-size:12px; outline:none; resize:vertical; }
+  .config-textarea:focus{ border-color:var(--accent); }
   .config-actions{ display:flex; gap:8px; margin-top:10px; }
   .config-action{ flex:1; border:1px solid var(--card-line); border-radius:10px; padding:8px; background:var(--seg-track); color:var(--text); font:inherit; font-size:12px; cursor:pointer; }
   .config-action.primary{ background:var(--send-bg); color:var(--accent-fg); }
@@ -2034,6 +2037,8 @@
           <input id="apiUrlInput" type="url" placeholder="API 地址，例如 https://api.example.com/v1" autocomplete="url">
           <input id="apiKeyInput" type="password" placeholder="API Key（留空表示保持原 Key）" autocomplete="off">
           <input id="apiModelInput" type="text" placeholder="模型名称，例如 gpt-4o" autocomplete="off">
+          <div class="config-field-label">自定义 Headers（可选，每行一条 key=value）</div>
+          <textarea id="apiHeadersInput" class="config-textarea" rows="2" placeholder="X-Ombre-Session-Id=main" autocomplete="off" spellcheck="false"></textarea>
         </div>
         <div class="config-actions"><button class="config-action primary" id="apiSaveBtn" type="button">保存 API 配置</button></div>
         <div class="push-hint" id="apiConfigHint"></div>
@@ -2358,7 +2363,7 @@ const statusCopy = $("#statusCopy"), statusSidEl = $("#statusSid"), statusUsedEl
 const sessionBtn = $("#sessionBtn"), sessionPop = $("#sessionPop"), sessionList = $("#sessionList"), sessionNewBtn = $("#sessionNewBtn");
 const terminalBtn = $("#terminalBtn"), terminalPanel = $("#terminalPanel"), terminalBack = $("#terminalBack"), terminalLog = $("#terminalLog"), terminalForm = $("#terminalForm"), terminalInput = $("#terminalInput"), terminalSession = $("#terminalSession");
 const brainSeg = $("#brainSeg"), brainHint = $("#brainHint");
-const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiSaveBtn = $("#apiSaveBtn"), apiConfigHint = $("#apiConfigHint");
+const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiHeadersInput = $("#apiHeadersInput"), apiSaveBtn = $("#apiSaveBtn"), apiConfigHint = $("#apiConfigHint");
 const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpConfigHint = $("#mcpConfigHint");
 const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), mcpList = $("#mcpList");
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
@@ -3356,6 +3361,11 @@ async function loadLoopConfig(){
     if (apiUrlInput) apiUrlInput.value = route.url || "";
     if (apiModelInput) apiModelInput.value = route.model || "";
     if (apiKeyInput) apiKeyInput.value = "";
+    if (apiHeadersInput && route.headers) {
+      apiHeadersInput.value = Object.entries(route.headers).map(([k,v]) => `${k}=${v}`).join("\n");
+    } else if (apiHeadersInput) {
+      apiHeadersInput.value = "";
+    }
     if (apiConfigHint) apiConfigHint.textContent = route.key_masked ? `已配置 Key：${route.key_masked}` : "尚未配置 API";
     if (mcpConfigHint) mcpConfigHint.textContent = "MCP Token 仅在输入时更新，留空保持原 Token";
     resetMcpForm();
@@ -3391,7 +3401,19 @@ if (openMcpConfigBtn) openMcpConfigBtn.addEventListener("click", () => setConfig
 document.querySelectorAll("[data-config-back]").forEach(button => button.addEventListener("click", () => setConfigView("hub")));
 if (apiSaveBtn) apiSaveBtn.addEventListener("click", async () => {
   const old = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
-  const saved = await saveLoopConfig({ main_chain:[{ index:0, url:apiUrlInput.value.trim(), key:apiKeyInput.value, model:apiModelInput.value.trim() || old.model }] }, apiConfigHint);
+  const entry = { index:0, url:apiUrlInput.value.trim(), key:apiKeyInput.value, model:apiModelInput.value.trim() || old.model };
+  const raw = (apiHeadersInput ? apiHeadersInput.value.trim() : "");
+  if (raw) {
+    const h = {};
+    for (const line of raw.split("\n")) {
+      const pair = line.trim();
+      if (!pair || pair.indexOf("=") === -1) continue;
+      const eq = pair.indexOf("=");
+      h[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
+    }
+    if (Object.keys(h).length) entry.headers = h;
+  }
+  const saved = await saveLoopConfig({ main_chain:[entry] }, apiConfigHint);
   if (saved) await saveBrain("loop");
 });
 if (mcpSaveBtn) mcpSaveBtn.addEventListener("click", () => {

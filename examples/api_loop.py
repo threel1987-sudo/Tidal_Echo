@@ -73,14 +73,26 @@ if not PERSONA:
     )
 
 
-def env_routes() -> list[dict[str, str]]:
-    routes: list[dict[str, str]] = []
+def env_routes() -> list[dict[str, Any]]:
+    routes: list[dict[str, Any]] = []
     for suffix in ("", "_2", "_3", "_4"):
         base = os.environ.get(f"LLM_API_BASE{suffix}", "").rstrip("/")
         key = os.environ.get(f"LLM_API_KEY{suffix}", "")
         model = os.environ.get(f"LLM_MODEL{suffix}", "")
         if base and key and model:
-            routes.append({"url": base, "key": key, "model": model})
+            entry: dict[str, Any] = {"url": base, "key": key, "model": model}
+            extra_h = os.environ.get(f"LLM_API_HEADERS{suffix}", "")
+            if extra_h:
+                parsed: dict[str, str] = {}
+                for line in extra_h.strip().split("\n"):
+                    pair = line.strip()
+                    if not pair or "=" not in pair:
+                        continue
+                    k, v = pair.split("=", 1)
+                    parsed[k.strip()] = v.strip()
+                if parsed:
+                    entry["headers"] = parsed
+            routes.append(entry)
     return routes
 
 
@@ -253,7 +265,13 @@ def public_config() -> dict[str, Any]:
         "active_session": active_session_id(),
         "sessions": session_rows(),
         "main_chain": [
-            {"index": i, "model": r.get("model", ""), "url": r.get("url", ""), "key_masked": mask_key(r.get("key", ""))}
+            {
+                "index": i,
+                "model": r.get("model", ""),
+                "url": r.get("url", ""),
+                "key_masked": mask_key(r.get("key", "")),
+                "headers": (r.get("headers") or None),
+            }
             for i, r in enumerate(main_chain())
         ],
         "mcp_servers": [
@@ -275,11 +293,16 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 continue
             old_idx = int(item.get("index", pos) or 0)
             prev = old[old_idx] if 0 <= old_idx < len(old) else {}
-            entry = {
+            entry: dict[str, Any] = {
                 "model": str(item.get("model") or prev.get("model") or "").strip(),
                 "url": str(item.get("url") or prev.get("url") or "").strip().rstrip("/"),
                 "key": str(item.get("key") or prev.get("key") or ""),
             }
+            raw_headers = item.get("headers") if "headers" in item else prev.get("headers")
+            if isinstance(raw_headers, dict) and raw_headers:
+                cleaned = {str(k).strip(): str(v).strip() for k, v in raw_headers.items() if str(k).strip() and str(v).strip()}
+                if cleaned:
+                    entry["headers"] = cleaned
             if not (entry["model"] and entry["url"] and entry["key"]):
                 raise HTTPException(status_code=400, detail=f"row {pos + 1}: model/url/key required")
             new_chain.append(entry)
@@ -323,7 +346,7 @@ async def relay_out(payload: dict[str, Any]) -> tuple[bool, Any]:
     return resp.status_code < 300, body
 
 
-async def stream_chat(route: dict[str, str], messages: list[dict[str, str]], sink) -> dict[str, Any]:
+async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sink) -> dict[str, Any]:
     body = {
         "model": route["model"],
         "messages": messages,
@@ -333,11 +356,15 @@ async def stream_chat(route: dict[str, str], messages: list[dict[str, str]], sin
     }
     text_parts: list[str] = []
     usage: dict[str, Any] = {}
+    req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
+    for hk, hv in (route.get("headers") or {}).items():
+        if str(hk) and str(hv):
+            req_headers[str(hk)] = str(hv)
     async with httpx.AsyncClient(timeout=None, trust_env=False) as client:
         async with client.stream(
             "POST",
             route["url"].rstrip("/") + "/chat/completions",
-            headers={"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"},
+            headers=req_headers,
             json=body,
         ) as resp:
             if resp.status_code in FALLBACK_CODES:
@@ -450,7 +477,7 @@ async def mcp_tools() -> list[dict[str, Any]]:
     return tools
 
 
-async def complete_chat(route: dict[str, str], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     body = {
         "model": route["model"],
         "messages": messages,
@@ -461,10 +488,14 @@ async def complete_chat(route: dict[str, str], messages: list[dict[str, Any]], t
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"
+    req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
+    for hk, hv in (route.get("headers") or {}).items():
+        if str(hk) and str(hv):
+            req_headers[str(hk)] = str(hv)
     async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
         resp = await client.post(
             route["url"].rstrip("/") + "/chat/completions",
-            headers={"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"},
+            headers=req_headers,
             json=body,
         )
     if resp.status_code in FALLBACK_CODES:
