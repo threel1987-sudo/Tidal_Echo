@@ -3403,16 +3403,16 @@ if (apiSaveBtn) apiSaveBtn.addEventListener("click", async () => {
   const old = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
   const entry = { index:0, url:apiUrlInput.value.trim(), key:apiKeyInput.value, model:apiModelInput.value.trim() || old.model };
   const raw = (apiHeadersInput ? apiHeadersInput.value.trim() : "");
+  const h = {};
   if (raw) {
-    const h = {};
     for (const line of raw.split("\n")) {
       const pair = line.trim();
       if (!pair || pair.indexOf("=") === -1) continue;
       const eq = pair.indexOf("=");
       h[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
     }
-    if (Object.keys(h).length) entry.headers = h;
   }
+  entry.headers = h;
   const saved = await saveLoopConfig({ main_chain:[entry] }, apiConfigHint);
   if (saved) await saveBrain("loop");
 });

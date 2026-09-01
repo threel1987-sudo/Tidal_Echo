@@ -298,11 +298,14 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 "url": str(item.get("url") or prev.get("url") or "").strip().rstrip("/"),
                 "key": str(item.get("key") or prev.get("key") or ""),
             }
-            raw_headers = item.get("headers") if "headers" in item else prev.get("headers")
-            if isinstance(raw_headers, dict) and raw_headers:
-                cleaned = {str(k).strip(): str(v).strip() for k, v in raw_headers.items() if str(k).strip() and str(v).strip()}
-                if cleaned:
-                    entry["headers"] = cleaned
+            if "headers" in item:
+                raw_headers = item.get("headers")
+                if isinstance(raw_headers, dict) and raw_headers:
+                    cleaned = {str(k).strip(): str(v).strip() for k, v in raw_headers.items() if str(k).strip() and str(v).strip()}
+                    if cleaned:
+                        entry["headers"] = cleaned
+            elif prev.get("headers"):
+                entry["headers"] = dict(prev["headers"])
             if not (entry["model"] and entry["url"] and entry["key"]):
                 raise HTTPException(status_code=400, detail=f"row {pos + 1}: model/url/key required")
             new_chain.append(entry)
