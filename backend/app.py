@@ -458,7 +458,7 @@ def loop_json(path: str, method: str = "GET", body=None):
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(loop_base_url() + path, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=35) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             raw = resp.read().decode("utf-8")
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
