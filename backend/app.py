@@ -1004,6 +1004,12 @@ async def app_debug_chat(request: Request):
     return loop_json("/loop/debug-chat", method="POST", body=await request.json())
 
 
+@app.get("/app/debug-mcp")
+async def app_debug_mcp(request: Request):
+    check_auth(request)
+    return loop_json("/loop/debug-mcp")
+
+
 @app.get("/app/sessions")
 async def app_sessions(request: Request):
     check_auth(request)

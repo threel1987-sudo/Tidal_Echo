@@ -712,6 +712,46 @@ async def loop_debug_chat(request: Request):
     return {"status": resp.status_code, "url": url, "request_model": body["model"], "request_messages_count": len(messages), "response_headers": dict(resp.headers), "response_body": resp_body}
 
 
+@app.get("/loop/debug-mcp")
+async def loop_debug_mcp():
+    rows = []
+    for server in mcp_servers():
+        item = {
+            "name": server.get("name") or "server",
+            "url": server.get("url") or "",
+            "enabled": bool(server.get("enabled", True)),
+            "token_configured": bool(server.get("token")),
+        }
+        if not item["enabled"]:
+            item["ok"] = False
+            item["error"] = "server disabled"
+            rows.append(item)
+            continue
+        try:
+            result = await mcp_call(server, "tools/list")
+            tools = result.get("tools", []) if isinstance(result, dict) else []
+            item["ok"] = True
+            item["tools_count"] = len(tools)
+            item["sample_tools"] = [
+                str(tool.get("name") or "")
+                for tool in tools[:10]
+                if isinstance(tool, dict) and tool.get("name")
+            ]
+        except httpx.HTTPStatusError as exc:
+            detail = ""
+            try:
+                detail = exc.response.text[:1000]
+            except Exception:
+                detail = str(exc)
+            item["ok"] = False
+            item["error"] = f"HTTP {exc.response.status_code}: {detail or exc}"
+        except Exception as exc:
+            item["ok"] = False
+            item["error"] = f"{type(exc).__name__}: {exc}"
+        rows.append(item)
+    return {"ok": any(row.get("ok") for row in rows), "servers": rows}
+
+
 @app.post("/loop/ingest")
 async def loop_ingest(request: Request):
     body = await request.json()

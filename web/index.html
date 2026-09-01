@@ -2057,7 +2057,9 @@
           <label class="config-check"><input id="mcpEnabledInput" type="checkbox" checked>启用 MCP 工具</label>
         </div>
         <div class="config-actions"><button class="config-action primary" id="mcpSaveBtn" type="button">添加 MCP 服务</button></div>
+        <div class="config-actions"><button class="config-action" id="mcpDebugBtn" type="button">测试 MCP 连接</button></div>
         <div class="push-hint" id="mcpConfigHint"></div>
+        <pre class="debug-output" id="mcpDebugOutput" style="display:none"></pre>
       </section>
 
       <!-- 模型选择（占位 · 假按键，以后接真切换）-->
@@ -2367,7 +2369,7 @@ const sessionBtn = $("#sessionBtn"), sessionPop = $("#sessionPop"), sessionList 
 const terminalBtn = $("#terminalBtn"), terminalPanel = $("#terminalPanel"), terminalBack = $("#terminalBack"), terminalLog = $("#terminalLog"), terminalForm = $("#terminalForm"), terminalInput = $("#terminalInput"), terminalSession = $("#terminalSession");
 const brainSeg = $("#brainSeg"), brainHint = $("#brainHint");
 const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiHeadersInput = $("#apiHeadersInput"), apiSaveBtn = $("#apiSaveBtn"), apiDebugBtn = $("#apiDebugBtn"), apiDebugOutput = $("#apiDebugOutput"), apiConfigHint = $("#apiConfigHint");
-const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpConfigHint = $("#mcpConfigHint");
+const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpDebugBtn = $("#mcpDebugBtn"), mcpDebugOutput = $("#mcpDebugOutput"), mcpConfigHint = $("#mcpConfigHint");
 const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), mcpList = $("#mcpList");
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
 let editingMcpIndex = null;
@@ -3439,6 +3441,27 @@ if (mcpSaveBtn) mcpSaveBtn.addEventListener("click", () => {
   const position = editingMcpIndex === null ? -1 : current.findIndex(server => server.index === editingMcpIndex);
   if (position >= 0) current[position] = entry; else current.push(entry);
   saveLoopConfig({ mcp_servers: mcpPayload(current).map((server, index) => ({ ...server, token: index === (position >= 0 ? position : current.length - 1) ? entry.token : "" })) }, mcpConfigHint);
+});
+if (mcpDebugBtn) mcpDebugBtn.addEventListener("click", async () => {
+  const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers : [];
+  if (!servers.length) {
+    if (mcpDebugOutput) {
+      mcpDebugOutput.style.display = "block";
+      mcpDebugOutput.textContent = "请先添加 MCP 服务并保存";
+    }
+    return;
+  }
+  if (mcpDebugOutput) {
+    mcpDebugOutput.style.display = "block";
+    mcpDebugOutput.textContent = "正在测试 MCP 连接...";
+  }
+  try {
+    const r = await fetch(`${API_BASE}/app/debug-mcp`, { headers: authHeaders() });
+    const body = await r.json();
+    if (mcpDebugOutput) mcpDebugOutput.textContent = JSON.stringify(body, null, 2);
+  } catch (err) {
+    if (mcpDebugOutput) mcpDebugOutput.textContent = `请求失败：${err.message || err}`;
+  }
 });
 if (mcpList) mcpList.addEventListener("click", event => {
   const button = event.target.closest("button[data-mcp-action]");
