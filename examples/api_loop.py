@@ -692,11 +692,23 @@ async def loop_chat(request: Request):
 
 @app.post("/loop/debug-chat")
 async def loop_debug_chat(request: Request):
+    params: dict[str, Any] = {}
+    try:
+        params = await request.json()
+    except Exception:
+        pass
     route = main_chain()[0] if main_chain() else None
     if not route:
         raise HTTPException(status_code=503, detail="no main_chain configured")
-    messages = build_messages("hello", before_id=None, session_id="debug", use_context=False)
-    body = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 50, "stream": False}
+    prompt = str(params.get("prompt") or params.get("text") or "hello")
+    with_tools = bool(params.get("with_tools", False))
+    messages = build_messages(prompt, before_id=None, session_id="debug", use_context=False)
+    body: dict[str, Any] = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 200, "stream": False}
+    if with_tools:
+        tools = await mcp_tools()
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
@@ -709,7 +721,7 @@ async def loop_debug_chat(request: Request):
         resp_body = resp.json()
     except Exception:
         resp_body = resp.text[:2000]
-    return {"status": resp.status_code, "url": url, "request_model": body["model"], "request_messages_count": len(messages), "response_headers": dict(resp.headers), "response_body": resp_body}
+    return {"status": resp.status_code, "url": url, "request_model": body["model"], "tools_count": len(tools) if with_tools else 0, "tool_names": [t["function"]["name"] for t in body.get("tools", [])] if with_tools else None, "response_headers": dict(resp.headers), "response_body": resp_body}
 
 
 @app.get("/loop/debug-mcp")
