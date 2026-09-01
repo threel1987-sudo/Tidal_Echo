@@ -314,7 +314,6 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
             new_chain.append(entry)
         if new_chain:
             cfg["main_chain"] = new_chain
-            _TOOLS_UNSUPPORTED_ROUTES.clear()
     if isinstance(body.get("mcp_servers"), list):
         old = mcp_servers()
         new_servers = []
@@ -333,7 +332,6 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=400, detail=f"MCP row {pos + 1}: url required")
             new_servers.append(entry)
         cfg["mcp_servers"] = new_servers
-        _TOOLS_UNSUPPORTED_ROUTES.clear()
     save_config(cfg)
     return public_config()
 
