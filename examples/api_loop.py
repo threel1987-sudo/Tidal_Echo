@@ -327,6 +327,7 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 "url": str(item.get("url") or prev.get("url") or "").strip().rstrip("/"),
                 "token": str(item.get("token") or prev.get("token") or ""),
                 "enabled": bool(item.get("enabled", prev.get("enabled", True))),
+                "disabled_tools": list(item.get("disabled_tools") or prev.get("disabled_tools") or []),
             }
             if not entry["url"]:
                 raise HTTPException(status_code=400, detail=f"MCP row {pos + 1}: url required")
@@ -479,11 +480,15 @@ async def mcp_tools() -> list[dict[str, Any]]:
     for server in mcp_servers():
         if not server["enabled"]:
             continue
+        disabled = set(server.get("disabled_tools") or [])
         try:
             result = await mcp_call(server, "tools/list")
             for tool in result.get("tools", []):
                 if isinstance(tool, dict) and tool.get("name"):
-                    tools.append({"type": "function", "function": {"name": f"mcp_{server['name']}_{tool['name']}", "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
+                    raw_name = str(tool["name"])
+                    if raw_name in disabled:
+                        continue
+                    tools.append({"type": "function", "function": {"name": f"mcp_{server['name']}_{raw_name}", "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
         except Exception:
             continue
     return tools
@@ -816,10 +821,10 @@ async def loop_debug_mcp():
             tools = result.get("tools", []) if isinstance(result, dict) else []
             item["ok"] = True
             item["tools_count"] = len(tools)
-            item["sample_tools"] = [
-                str(tool.get("name") or "")
-                for tool in tools[:10]
-                if isinstance(tool, dict) and tool.get("name")
+            item["tools"] = [
+                {"name": str(t.get("name") or ""), "description": str(t.get("description") or "")}
+                for t in tools
+                if isinstance(t, dict) and t.get("name")
             ]
         except httpx.HTTPStatusError as exc:
             detail = ""

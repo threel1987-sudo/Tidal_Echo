@@ -1065,16 +1065,39 @@
   .config-view-title strong{ font-size:15px; }
   .config-view-title span{ color:var(--text-soft); font-size:11px; }
   .mcp-list{ display:grid; gap:9px; }
-  .mcp-item{ display:grid; gap:9px; padding:12px; border:1px solid var(--card-line); border-radius:10px; background:var(--field-bg); }
-  .mcp-item-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .mcp-item{ display:grid; gap:0; border:1px solid var(--card-line); border-radius:12px; background:var(--field-bg); overflow:hidden; transition:box-shadow .18s; }
+  .mcp-item-head{ display:flex; align-items:center; gap:8px; padding:11px 12px; cursor:pointer; user-select:none; }
+  .mcp-item-head:hover{ background:rgba(128,128,128,.05); }
+  .mcp-item-chevron{ flex:0 0 auto; width:16px; height:16px; display:flex; align-items:center; justify-content:center; color:var(--text-faint); transition:transform .22s ease; }
+  .mcp-item.open .mcp-item-chevron{ transform:rotate(90deg); }
+  .mcp-item-meta{ flex:1 1 0; min-width:0; display:grid; gap:2px; }
   .mcp-item-name{ min-width:0; overflow:hidden; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
   .mcp-item-url{ overflow:hidden; color:var(--text-soft); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
-  .mcp-item-actions{ display:flex; align-items:center; gap:6px; }
-  .mcp-icon-btn{ width:28px; height:28px; padding:0; border:1px solid var(--card-line); border-radius:8px; background:var(--seg-track); color:var(--text); cursor:pointer; }
+  .mcp-item-actions{ display:flex; align-items:center; gap:5px; flex:0 0 auto; }
+  .mcp-icon-btn{ width:28px; height:28px; padding:0; border:1px solid var(--card-line); border-radius:8px; background:var(--seg-track); color:var(--text); cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; }
   .mcp-icon-btn.danger{ color:#d85b50; }
-  .mcp-item-status{ color:var(--text-soft); font-size:11px; }
+  .mcp-item-status{ color:var(--text-soft); font-size:11px; flex:0 0 auto; }
   .mcp-item-status.enabled{ color:var(--accent); }
   .mcp-item-status.disabled{ color:var(--text-faint); }
+  .mcp-tools-panel{ display:none; border-top:1px solid var(--card-line); }
+  .mcp-item.open .mcp-tools-panel{ display:block; }
+  .mcp-tools-loading{ padding:10px 14px; color:var(--text-faint); font-size:11px; }
+  .mcp-tools-list{ display:grid; gap:0; }
+  .mcp-tool-row{ display:flex; align-items:flex-start; gap:8px; padding:9px 14px; border-bottom:1px solid var(--card-line); }
+  .mcp-tool-row:last-child{ border-bottom:0; }
+  .mcp-tool-toggle{ flex:0 0 auto; margin-top:1px; width:32px; height:18px; position:relative; cursor:pointer; }
+  .mcp-tool-toggle input{ opacity:0; width:0; height:0; position:absolute; }
+  .mcp-tool-toggle-track{ position:absolute; inset:0; border-radius:9px; background:var(--seg-track); border:1px solid var(--card-line); transition:background .18s; }
+  .mcp-tool-toggle input:checked ~ .mcp-tool-toggle-track{ background:var(--accent); border-color:var(--accent); }
+  .mcp-tool-toggle-thumb{ position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; transition:transform .18s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .mcp-tool-toggle input:checked ~ .mcp-tool-toggle-track .mcp-tool-toggle-thumb{ transform:translateX(14px); }
+  .mcp-tool-copy{ min-width:0; flex:1; display:grid; gap:2px; }
+  .mcp-tool-name{ font-size:12px; font-weight:600; color:var(--text); word-break:break-all; }
+  .mcp-tool-desc{ font-size:11px; color:var(--text-soft); line-height:1.45; }
+  .mcp-debug-section{ padding:10px 12px; border-top:1px solid var(--card-line); display:flex; flex-direction:column; gap:8px; }
+  .mcp-debug-label{ font-size:11px; color:var(--text-faint); font-weight:500; letter-spacing:.03em; text-transform:uppercase; }
+  .config-action.ghost{ background:transparent; color:var(--text-soft); border-color:var(--card-line); font-size:11.5px; }
+  .config-action.ghost:hover{ background:var(--seg-track); color:var(--text); }
   @media (max-width:520px){ .config-hub{ grid-template-columns:1fr; } }
 
   /* segmented control */
@@ -2042,24 +2065,26 @@
           <textarea id="apiHeadersInput" class="config-textarea" rows="2" placeholder="X-Ombre-Session-Id=main" autocomplete="off" spellcheck="false"></textarea>
         </div>
         <div class="config-actions"><button class="config-action primary" id="apiSaveBtn" type="button">保存 API 配置</button></div>
-        <div class="config-actions"><button class="config-action" id="apiDebugBtn" type="button">测试 Gateway 连接</button></div>
         <div class="push-hint" id="apiConfigHint"></div>
+        <div class="config-actions" style="margin-top:4px"><button class="config-action ghost" id="apiDebugBtn" type="button">测试 Gateway 连接</button></div>
         <pre class="debug-output" id="apiDebugOutput" style="display:none"></pre>
       </section>
 
       <section class="settings-card config-view" id="mcpConfigView">
-        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>MCP 工具</strong><span>逐个管理服务与启用状态</span></div></div>
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>MCP 工具</strong><span>点击服务查看工具列表</span></div></div>
         <div class="mcp-list" id="mcpList"></div>
-        <div class="config-fields" id="mcpConfigFields">
+        <div class="config-fields" id="mcpConfigFields" style="margin-top:4px">
           <input id="mcpNameInput" type="text" placeholder="服务名称，例如 tools" autocomplete="off">
           <input id="mcpUrlInput" type="url" placeholder="MCP Server URL" autocomplete="url">
           <input id="mcpTokenInput" type="password" placeholder="鉴权 Token（可选）" autocomplete="off">
           <label class="config-check"><input id="mcpEnabledInput" type="checkbox" checked>启用 MCP 工具</label>
         </div>
         <div class="config-actions"><button class="config-action primary" id="mcpSaveBtn" type="button">添加 MCP 服务</button></div>
-        <div class="config-actions"><button class="config-action" id="mcpDebugBtn" type="button">测试 MCP 连接</button></div>
-        <div class="config-actions"><button class="config-action" id="mcpToolCallBtn" type="button">测试工具调用（带 tools 请求模型）</button></div>
         <div class="push-hint" id="mcpConfigHint"></div>
+        <div class="config-actions" style="margin-top:4px">
+          <button class="config-action ghost" id="mcpDebugBtn" type="button">测试连接</button>
+          <button class="config-action ghost" id="mcpToolCallBtn" type="button">测试工具调用</button>
+        </div>
         <pre class="debug-output" id="mcpDebugOutput" style="display:none"></pre>
       </section>
 
@@ -3310,6 +3335,7 @@ function updateConfigEntryStatus(){
   if (apiEntryStatus) apiEntryStatus.textContent = route.url && route.model ? `${route.model} · ${route.url}` : "配置模型连接";
   if (mcpEntryStatus) mcpEntryStatus.textContent = servers.length ? `${servers.length} 个服务 · ${servers.filter(s => s.enabled !== false).length} 个启用` : "管理工具服务";
 }
+const MCP_TOOLS_CACHE = {};
 function renderMcpList(){
   if (!mcpList) return;
   const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers : [];
@@ -3317,45 +3343,155 @@ function renderMcpList(){
   servers.forEach((server, position) => {
     const item = document.createElement("div");
     item.className = "mcp-item";
+
     const head = document.createElement("div");
     head.className = "mcp-item-head";
+
+    const chevron = document.createElement("span");
+    chevron.className = "mcp-item-chevron";
+    chevron.innerHTML = `<svg width="8" height="12" viewBox="0 0 8 12" fill="none"><path d="M1 1l6 5-6 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+    const meta = document.createElement("div");
+    meta.className = "mcp-item-meta";
     const name = document.createElement("strong");
     name.className = "mcp-item-name";
     name.textContent = server.name || `server-${position + 1}`;
+    const urlEl = document.createElement("div");
+    urlEl.className = "mcp-item-url";
+    urlEl.textContent = server.url || "";
+    meta.append(name, urlEl);
+
     const status = document.createElement("span");
     status.className = `mcp-item-status ${server.enabled === false ? "disabled" : "enabled"}`;
     status.textContent = server.enabled === false ? "已停用" : "已启用";
-    head.append(name, status);
-    const url = document.createElement("div");
-    url.className = "mcp-item-url";
-    url.textContent = server.url || "";
+
     const actions = document.createElement("div");
     actions.className = "mcp-item-actions";
+
     const toggle = document.createElement("button");
     toggle.className = "mcp-icon-btn";
     toggle.type = "button";
     toggle.title = server.enabled === false ? "启用" : "停用";
-    toggle.textContent = server.enabled === false ? "启" : "停";
+    toggle.innerHTML = server.enabled === false
+      ? `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M4 6.5l2 2 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      : `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 4.5l4 4M8.5 4.5l-4 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
     toggle.dataset.mcpAction = "toggle";
+
     const edit = document.createElement("button");
     edit.className = "mcp-icon-btn";
     edit.type = "button";
     edit.title = "编辑";
-    edit.textContent = "改";
+    edit.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
     edit.dataset.mcpAction = "edit";
+
     const remove = document.createElement("button");
     remove.className = "mcp-icon-btn danger";
     remove.type = "button";
     remove.title = "删除";
-    remove.textContent = "删";
+    remove.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4.5 3v6M7.5 3v6M3 3l.5 7h5L9 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     remove.dataset.mcpAction = "delete";
-    [toggle, edit, remove].forEach(button => { button.dataset.mcpPosition = position; actions.appendChild(button); });
-    item.append(head, url, actions);
+
+    [toggle, edit, remove].forEach(btn => { btn.dataset.mcpPosition = position; actions.appendChild(btn); });
+    head.append(chevron, meta, status, actions);
+
+    const toolsPanel = document.createElement("div");
+    toolsPanel.className = "mcp-tools-panel";
+    const toolsLoading = document.createElement("div");
+    toolsLoading.className = "mcp-tools-loading";
+    toolsLoading.textContent = "点击展开工具列表…";
+    toolsPanel.appendChild(toolsLoading);
+
+    head.addEventListener("click", async (e) => {
+      if (e.target.closest("button[data-mcp-action]")) return;
+      const wasOpen = item.classList.contains("open");
+      item.classList.toggle("open", !wasOpen);
+      if (!wasOpen && server.url) {
+        const cacheKey = server.url;
+        if (MCP_TOOLS_CACHE[cacheKey]) {
+          renderToolsList(toolsPanel, MCP_TOOLS_CACHE[cacheKey], server, position);
+        } else {
+          toolsLoading.textContent = "正在加载工具列表…";
+          try {
+            const r = await fetch(`${API_BASE}/app/debug-mcp`, { headers: authHeaders() });
+            const body = await r.json();
+            const serverResult = body.servers && body.servers.find(s => s.url === server.url);
+            const tools = serverResult ? (serverResult.tools || []) : [];
+            MCP_TOOLS_CACHE[cacheKey] = tools;
+            renderToolsList(toolsPanel, tools, server, position);
+          } catch (_) {
+            toolsLoading.textContent = "无法加载工具列表";
+          }
+        }
+      }
+    });
+
+    item.append(head, toolsPanel);
     mcpList.appendChild(item);
   });
 }
+function renderToolsList(panel, tools, server, position) {
+  panel.textContent = "";
+  if (!tools.length) {
+    const empty = document.createElement("div");
+    empty.className = "mcp-tools-loading";
+    empty.textContent = "暂无可用工具";
+    panel.appendChild(empty);
+    return;
+  }
+  const disabledTools = (server.disabled_tools || []);
+  const list = document.createElement("div");
+  list.className = "mcp-tools-list";
+  tools.forEach(tool => {
+    const toolName = tool.name || "";
+    const toolDesc = tool.description || "";
+    const isEnabled = !disabledTools.includes(toolName);
+    const row = document.createElement("div");
+    row.className = "mcp-tool-row";
+    const toggleLabel = document.createElement("label");
+    toggleLabel.className = "mcp-tool-toggle";
+    toggleLabel.title = isEnabled ? "已启用，点击停用" : "已停用，点击启用";
+    const toggleInput = document.createElement("input");
+    toggleInput.type = "checkbox";
+    toggleInput.checked = isEnabled;
+    const track = document.createElement("span");
+    track.className = "mcp-tool-toggle-track";
+    const thumb = document.createElement("span");
+    thumb.className = "mcp-tool-toggle-thumb";
+    track.appendChild(thumb);
+    toggleLabel.append(toggleInput, track);
+    toggleInput.addEventListener("change", () => {
+      const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers.slice() : [];
+      const srv = servers[position];
+      if (!srv) return;
+      const cur = srv.disabled_tools ? [...srv.disabled_tools] : [];
+      if (toggleInput.checked) {
+        const idx = cur.indexOf(toolName);
+        if (idx >= 0) cur.splice(idx, 1);
+      } else {
+        if (!cur.includes(toolName)) cur.push(toolName);
+      }
+      servers[position] = { ...srv, disabled_tools: cur };
+      saveLoopConfig({ mcp_servers: mcpPayload(servers).map((s, i) => ({ ...s, disabled_tools: servers[i] ? (servers[i].disabled_tools || []) : [] })) }, mcpConfigHint);
+    });
+    const copy = document.createElement("div");
+    copy.className = "mcp-tool-copy";
+    const nameEl = document.createElement("div");
+    nameEl.className = "mcp-tool-name";
+    nameEl.textContent = toolName;
+    copy.appendChild(nameEl);
+    if (toolDesc) {
+      const descEl = document.createElement("div");
+      descEl.className = "mcp-tool-desc";
+      descEl.textContent = toolDesc;
+      copy.appendChild(descEl);
+    }
+    row.append(toggleLabel, copy);
+    list.appendChild(row);
+  });
+  panel.appendChild(list);
+}
 function mcpPayload(servers){
-  return servers.map((server, position) => ({ index: Number.isInteger(server.index) ? server.index : position, name: server.name || "tools", url: server.url || "", token: "", enabled: server.enabled !== false }));
+  return servers.map((server, position) => ({ index: Number.isInteger(server.index) ? server.index : position, name: server.name || "tools", url: server.url || "", token: "", enabled: server.enabled !== false, disabled_tools: server.disabled_tools || [] }));
 }
 async function loadLoopConfig(){
   if (USE_MOCK || !secret) return;
