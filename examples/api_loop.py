@@ -62,6 +62,7 @@ STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false",
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 
 _TOOLS_UNSUPPORTED_ROUTES: set[tuple[str, str]] = set()
+_TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
 
 if not PERSONA and PERSONA_FILE:
     try:
@@ -532,17 +533,86 @@ async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[st
     raise RuntimeError("MCP tool is not configured")
 
 
+def _prompt_tools_block(tools: list[dict[str, Any]]) -> str:
+    lines = ["You have the following tools available. To call a tool, output EXACTLY this format (no markdown, no extra text around it):",
+             "<tool_call>{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}</tool_call>",
+             "",
+             "After you receive the tool result, continue your response to the user.",
+             "You may call multiple tools in sequence if needed. Only call a tool when it is genuinely useful.",
+             "",
+             "Available tools:"]
+    for t in tools:
+        fn = t.get("function") or t
+        name = fn.get("name", "")
+        desc = fn.get("description", "")
+        params = fn.get("parameters") or {}
+        props = params.get("properties") or {}
+        req = params.get("required") or []
+        param_parts = []
+        for pname, pschema in props.items():
+            ptype = pschema.get("type", "any")
+            pdesc = pschema.get("description", "")
+            marker = " (required)" if pname in req else ""
+            param_parts.append(f"    - {pname}: {ptype}{marker}" + (f" — {pdesc}" if pdesc else ""))
+        lines.append(f"\n### {name}")
+        if desc:
+            lines.append(desc)
+        if param_parts:
+            lines.append("  Parameters:")
+            lines.extend(param_parts)
+    return "\n".join(lines)
+
+
+async def _prompt_tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_rounds: int = 8) -> dict[str, Any]:
+    system_msg = messages[0] if messages and messages[0].get("role") == "system" else None
+    if system_msg:
+        system_msg["content"] = system_msg["content"].rstrip() + "\n\n" + _prompt_tools_block(tools)
+    else:
+        messages.insert(0, {"role": "system", "content": _prompt_tools_block(tools)})
+    last_out: dict[str, Any] = {"text": "", "usage": {}}
+    for _ in range(max_rounds):
+        out = await complete_chat(route, messages)
+        text = out.get("text") or ""
+        last_out = out
+        matches = list(_TOOL_CALL_RE.finditer(text))
+        if not matches:
+            break
+        for m in matches:
+            try:
+                call = json.loads(m.group(1))
+                tool_name = str(call.get("name") or "")
+                tool_args = call.get("arguments") or {}
+                if not isinstance(tool_args, dict):
+                    tool_args = {}
+                result = await execute_mcp_tool(tool_name, tool_args)
+                result_str = json.dumps(result, ensure_ascii=False)
+            except Exception as exc:
+                result_str = json.dumps({"error": str(exc)}, ensure_ascii=False)
+            messages.append({"role": "assistant", "content": text})
+            messages.append({"role": "user", "content": f"<tool_result name=\"{tool_name}\">{result_str}</tool_result>"})
+            text = ""
+        if not text:
+            continue
+    final_text = (last_out.get("text") or "")
+    final_text = _TOOL_CALL_RE.sub("", final_text).strip()
+    if final_text != last_out.get("text"):
+        last_out["text"] = final_text
+    return last_out
+
+
 async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False) -> dict[str, Any]:
     tried = []
     last_error = ""
     for route in main_chain():
         tried.append(route.get("model"))
         try:
-            tools = await mcp_tools()
+            all_tools = await mcp_tools()
             route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
-            if route_key in _TOOLS_UNSUPPORTED_ROUTES:
-                tools = []
-            if emit_stream and STREAM_OUTPUT and not tools:
+            use_prompt_tools = route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)
+            native_tools = [] if use_prompt_tools else all_tools
+            if use_prompt_tools:
+                out = await _prompt_tool_loop(route, messages, all_tools)
+            elif emit_stream and STREAM_OUTPUT and not native_tools:
                 try:
                     async def sink(chunk: str) -> None:
                         await relay_out({
@@ -561,7 +631,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                 base_messages = messages[:]
                 try:
                     for _ in range(8):
-                        out = await complete_chat(route, messages, tools)
+                        out = await complete_chat(route, messages, native_tools)
                         msg = out.get("message") or {}
                         calls = msg.get("tool_calls") or []
                         if not calls and isinstance(msg.get("function_call"), dict):
@@ -581,26 +651,16 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     else:
                         out = {"text": "", "usage": {}}
                 except HTTPException as exc:
-                    if exc.status_code == 400 and tools:
+                    if exc.status_code == 400 and native_tools:
                         _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
-                    if not tools or exc.status_code not in {400, 404, 405, 422}:
-                        raise
-                    if emit_stream and STREAM_OUTPUT:
                         try:
-                            async def sink(chunk: str) -> None:
-                                await relay_out({
-                                    "type": "reply_delta",
-                                    "stream_id": stream_id,
-                                    "text": chunk,
-                                    "done": False,
-                                    "api_session": session_id,
-                                })
-                            out = await stream_chat(route, base_messages, sink)
-                        except HTTPException:
+                            out = await _prompt_tool_loop(route, base_messages, all_tools)
+                        except Exception:
                             out = await complete_chat(route, base_messages)
+                    elif not native_tools or exc.status_code not in {404, 405, 422}:
+                        raise
                     else:
                         out = await complete_chat(route, base_messages)
-                    out["tools_unavailable"] = True
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
@@ -621,8 +681,6 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
     if not reply:
         error = str(out.get("error") or "").strip()
         reply = f"API 调用失败：{error}" if error else "API 未返回回复内容。"
-    if out.get("tools_unavailable"):
-        reply = "（工具暂不可用：当前上游 LLM 提供方不支持 function calling，已自动切换为纯文本模式。）\n\n" + reply
     meta = {
         "runtime": "api_loop",
         "model": out.get("model"),
