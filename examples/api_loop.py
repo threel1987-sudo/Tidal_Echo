@@ -146,6 +146,49 @@ def history_n() -> int:
         return HISTORY_N
 
 
+def persona() -> str:
+    cfg = load_config()
+    p = str(cfg.get("persona") or "").strip()
+    if not p and PERSONA_FILE:
+        try:
+            p = Path(PERSONA_FILE).read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+    return p or PERSONA
+
+def ai_name() -> str:
+    cfg = load_config()
+    return str(cfg.get("ai_name") or "").strip()
+
+def temperature() -> float:
+    try:
+        return float(load_config().get("temperature", TEMPERATURE))
+    except Exception:
+        return TEMPERATURE
+
+def top_p() -> float | None:
+    cfg = load_config()
+    v = cfg.get("top_p")
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except Exception:
+        return None
+
+def max_tokens() -> int:
+    try:
+        return max(100, int(load_config().get("max_tokens", MAX_TOKENS)))
+    except Exception:
+        return MAX_TOKENS
+
+def thinking_budget() -> int:
+    try:
+        return max(0, int(load_config().get("thinking_budget", 0)))
+    except Exception:
+        return 0
+
+
 def session_rows() -> list[dict[str, Any]]:
     rows = load_config().get("sessions")
     if not isinstance(rows, list):
@@ -239,7 +282,7 @@ def relay_rows(before_id: int | None, session_id: str, limit: int) -> list[dict[
 
 def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True) -> list[dict[str, str]]:
     tool_hint = " When a configured MCP tool can provide current, external, or actionable information, use it before answering."
-    messages = [{"role": "system", "content": PERSONA + tool_hint}]
+    messages = [{"role": "system", "content": persona() + tool_hint}]
     if use_context:
         for row in relay_rows(before_id, session_id, history_n()):
             content = str(row.get("text") or "").strip()
@@ -263,8 +306,15 @@ def mcp_servers() -> list[dict[str, Any]]:
 
 
 def public_config() -> dict[str, Any]:
+    cfg = load_config()
     return {
         "history_n": history_n(),
+        "persona": cfg.get("persona", ""),
+        "ai_name": cfg.get("ai_name", ""),
+        "temperature": cfg.get("temperature", TEMPERATURE),
+        "top_p": cfg.get("top_p", None),
+        "max_tokens": cfg.get("max_tokens", MAX_TOKENS),
+        "thinking_budget": cfg.get("thinking_budget", 0),
         "active_session": active_session_id(),
         "sessions": session_rows(),
         "main_chain": [
@@ -288,6 +338,30 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
     cfg = load_config()
     if "history_n" in body:
         cfg["history_n"] = max(0, min(int(body.get("history_n") or 0), 200))
+    if "persona" in body:
+        cfg["persona"] = str(body.get("persona") or "").strip()
+    if "ai_name" in body:
+        cfg["ai_name"] = str(body.get("ai_name") or "").strip()
+    if "temperature" in body:
+        try:
+            cfg["temperature"] = max(0.0, min(2.0, float(body["temperature"])))
+        except Exception:
+            pass
+    if "top_p" in body:
+        try:
+            cfg["top_p"] = max(0.0, min(1.0, float(body["top_p"])))
+        except Exception:
+            pass
+    if "max_tokens" in body:
+        try:
+            cfg["max_tokens"] = max(100, min(32000, int(body["max_tokens"])))
+        except Exception:
+            pass
+    if "thinking_budget" in body:
+        try:
+            cfg["thinking_budget"] = max(0, min(32000, int(body["thinking_budget"])))
+        except Exception:
+            pass
     if isinstance(body.get("main_chain"), list):
         old = main_chain()
         new_chain = []
@@ -357,10 +431,16 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
     body = {
         "model": route["model"],
         "messages": messages,
-        "temperature": TEMPERATURE,
-        "max_tokens": MAX_TOKENS,
+        "temperature": temperature(),
+        "max_tokens": max_tokens(),
         "stream": True,
     }
+    tp = top_p()
+    if tp is not None:
+        body["top_p"] = tp
+    budget = thinking_budget()
+    if budget > 0:
+        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
     text_parts: list[str] = []
     usage: dict[str, Any] = {}
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
@@ -498,10 +578,16 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     body = {
         "model": route["model"],
         "messages": messages,
-        "temperature": TEMPERATURE,
-        "max_tokens": MAX_TOKENS,
+        "temperature": temperature(),
+        "max_tokens": max_tokens(),
         "stream": False,
     }
+    tp = top_p()
+    if tp is not None:
+        body["top_p"] = tp
+    budget = thinking_budget()
+    if budget > 0:
+        body["thinking"] = {"type": "enabled", "budget_tokens": budget}
     if tools:
         body["tools"] = tools
         body["tool_choice"] = "auto"

@@ -196,7 +196,7 @@
     background: transparent;
     border: none;
     border-radius: 0;
-    padding: 0 76px;
+    padding: 0 110px;
   }
   .peerpill .name{
     font-family: "Songti SC", "Noto Serif SC", "STSong", "SimSun", serif;
@@ -241,7 +241,7 @@
     display:flex;
     align-items:center;
     justify-content:flex-end;
-    gap: clamp(24px, 4vw, 42px);
+    gap: clamp(10px, 2vw, 20px);
     height:36px;
   }
   .topbtn{
@@ -1197,12 +1197,12 @@
       --header-h: 56px;
       --avatar-size: 32px;
     }
-    .peerpill{ padding: 0 44px; }
+    .peerpill{ padding: 0 142px 0 52px; }
     .peerpill .name{ font-size: 18px; }
     .peerpill .status{ font-size: 12px; margin-top: 3px; }
     .backbtn{ left: 16px; top: calc(env(safe-area-inset-top) + 16px); width: 32px; height: 32px; }
     .backbtn svg{ width: 20px; height: 20px; }
-    .header-actions{ right: 16px; top: calc(env(safe-area-inset-top) + 16px); gap: 26px; height:32px; }
+    .header-actions{ right: 16px; top: calc(env(safe-area-inset-top) + 16px); gap: 12px; height:32px; }
     .topbtn{ width:32px; height:32px; }
     .topbtn svg{ width:22px; height:22px; }
     .topbtn.more svg{ width:20px; height:20px; }
@@ -2052,6 +2052,14 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M5 9h14v4a7 7 0 0 1-14 0z"/><path d="M12 20v-4"/></svg>
             <span class="config-entry-copy"><strong>MCP 工具</strong><span id="mcpEntryStatus">管理工具服务</span></span>
           </button>
+          <button class="config-entry" id="openPersonaConfigBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            <span class="config-entry-copy"><strong>AI 人设</strong><span id="personaEntryStatus">人设提示词与助手信息</span></span>
+          </button>
+          <button class="config-entry" id="openModelParamsBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            <span class="config-entry-copy"><strong>模型参数</strong><span id="modelParamsEntryStatus">温度·上下文·Token·思考</span></span>
+          </button>
         </div>
       </section>
 
@@ -2086,6 +2094,36 @@
           <button class="config-action ghost" id="mcpToolCallBtn" type="button">测试工具调用</button>
         </div>
         <pre class="debug-output" id="mcpDebugOutput" style="display:none"></pre>
+      </section>
+
+      <section class="settings-card config-view" id="personaConfigView">
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>AI 人设</strong><span>系统提示词与助手信息</span></div></div>
+        <div class="config-fields">
+          <div class="config-field-label">系统提示词（Persona）</div>
+          <textarea id="personaInput" class="config-textarea" rows="6" placeholder="你是用户的私密 AI 伴侣，在一对一的聊天中回复自然、温暖..." autocomplete="off" spellcheck="false"></textarea>
+          <div class="config-field-label">助手显示名字（留空则用备注名）</div>
+          <input id="aiNameInput" type="text" placeholder="例如：Claude" autocomplete="off" maxlength="24">
+        </div>
+        <div class="config-actions"><button class="config-action primary" id="personaSaveBtn" type="button">保存人设</button></div>
+        <div class="push-hint" id="personaConfigHint"></div>
+      </section>
+
+      <section class="settings-card config-view" id="modelParamsConfigView">
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>模型参数</strong><span>调节生成行为</span></div></div>
+        <div class="config-fields" id="modelParamsFields">
+          <div class="config-field-label">Temperature <i class="info-i" title="越高越随机，越低越确定。推荐 0.7">i</i></div>
+          <input id="temperatureInput" type="number" min="0" max="2" step="0.05" placeholder="0.7" autocomplete="off">
+          <div class="config-field-label">Top P <i class="info-i" title="核采样概率，通常与 temperature 二选一调节。推荐 1.0">i</i></div>
+          <input id="topPInput" type="number" min="0" max="1" step="0.05" placeholder="1.0" autocomplete="off">
+          <div class="config-field-label">上下文消息数量 <i class="info-i" title="每次请求携带多少条历史消息（含双方）">i</i></div>
+          <input id="historyNInput" type="number" min="0" max="200" step="1" placeholder="24" autocomplete="off">
+          <div class="config-field-label">最大 Token 数 <i class="info-i" title="单次回复最多生成多少 token">i</i></div>
+          <input id="maxTokensInput" type="number" min="100" max="32000" step="100" placeholder="2000" autocomplete="off">
+          <div class="config-field-label">思考预算（Thinking Budget）<i class="info-i" title="Anthropic extended thinking 模式下，给模型的思考 token 预算。0 表示关闭。">i</i></div>
+          <input id="thinkingBudgetInput" type="number" min="0" max="32000" step="500" placeholder="0（关闭）" autocomplete="off">
+        </div>
+        <div class="config-actions"><button class="config-action primary" id="modelParamsSaveBtn" type="button">保存参数</button></div>
+        <div class="push-hint" id="modelParamsConfigHint"></div>
       </section>
 
       <!-- 模型选择（占位 · 假按键，以后接真切换）-->
@@ -2398,6 +2436,7 @@ const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModel
 const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpDebugBtn = $("#mcpDebugBtn"), mcpToolCallBtn = $("#mcpToolCallBtn"), mcpDebugOutput = $("#mcpDebugOutput"), mcpConfigHint = $("#mcpConfigHint");
 const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), mcpList = $("#mcpList");
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
+const personaConfigView = $("#personaConfigView"), modelParamsConfigView = $("#modelParamsConfigView");
 let editingMcpIndex = null;
 
 /* ════════ 固定聊天背景 + 本地头像 ════════ */
@@ -3320,6 +3359,8 @@ function setConfigView(view){
   configHubView.classList.toggle("hidden", view !== "hub");
   apiConfigView.classList.toggle("active", view === "api");
   mcpConfigView.classList.toggle("active", view === "mcp");
+  if (personaConfigView) personaConfigView.classList.toggle("active", view === "persona");
+  if (modelParamsConfigView) modelParamsConfigView.classList.toggle("active", view === "model-params");
 }
 function resetMcpForm(){
   editingMcpIndex = null;
@@ -3540,6 +3581,57 @@ async function saveLoopConfig(payload, hint){
 }
 if (openApiConfigBtn) openApiConfigBtn.addEventListener("click", () => setConfigView("api"));
 if (openMcpConfigBtn) openMcpConfigBtn.addEventListener("click", () => setConfigView("mcp"));
+async function loadPersonaConfig(){
+  try{
+    const r = await fetch(`${API_BASE}/app/config`, { headers: authHeaders() });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    const pi = $("#personaInput"), ai = $("#aiNameInput");
+    if (pi) pi.value = cfg.persona || "";
+    if (ai) ai.value = cfg.ai_name || "";
+  }catch{}
+}
+async function loadModelParamsConfig(){
+  try{
+    const r = await fetch(`${API_BASE}/app/config`, { headers: authHeaders() });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    const temp = $("#temperatureInput"), topp = $("#topPInput"), hist = $("#historyNInput"),
+          maxt = $("#maxTokensInput"), think = $("#thinkingBudgetInput");
+    if (temp) temp.value = cfg.temperature ?? "";
+    if (topp) topp.value = cfg.top_p ?? "";
+    if (hist) hist.value = cfg.history_n ?? "";
+    if (maxt) maxt.value = cfg.max_tokens ?? "";
+    if (think) think.value = cfg.thinking_budget ?? "";
+  }catch{}
+}
+$("#openPersonaConfigBtn")?.addEventListener("click", () => { setConfigView("persona"); loadPersonaConfig(); });
+$("#openModelParamsBtn")?.addEventListener("click", () => { setConfigView("model-params"); loadModelParamsConfig(); });
+$("#personaSaveBtn")?.addEventListener("click", async () => {
+  const hint = $("#personaConfigHint");
+  const persona = ($("#personaInput")?.value || "").trim();
+  const ai_name = ($("#aiNameInput")?.value || "").trim();
+  await saveLoopConfig({ persona, ai_name }, hint);
+  if (ai_name) {
+    const nameEl = document.querySelector(".peerpill .name");
+    if (nameEl) nameEl.textContent = ai_name;
+  }
+});
+$("#modelParamsSaveBtn")?.addEventListener("click", async () => {
+  const hint = $("#modelParamsConfigHint");
+  const payload = {};
+  const tempVal = parseFloat($("#temperatureInput")?.value);
+  const toppVal = parseFloat($("#topPInput")?.value);
+  const histVal = parseInt($("#historyNInput")?.value);
+  const maxtVal = parseInt($("#maxTokensInput")?.value);
+  const thinkVal = parseInt($("#thinkingBudgetInput")?.value);
+  if (!isNaN(tempVal)) payload.temperature = tempVal;
+  if (!isNaN(toppVal)) payload.top_p = toppVal;
+  if (!isNaN(histVal)) payload.history_n = histVal;
+  if (!isNaN(maxtVal)) payload.max_tokens = maxtVal;
+  if (!isNaN(thinkVal)) payload.thinking_budget = thinkVal;
+  await saveLoopConfig(payload, hint);
+});
 document.querySelectorAll("[data-config-back]").forEach(button => button.addEventListener("click", () => setConfigView("hub")));
 if (apiSaveBtn) apiSaveBtn.addEventListener("click", async () => {
   const old = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
