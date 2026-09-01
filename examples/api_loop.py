@@ -675,6 +675,28 @@ async def loop_chat(request: Request):
     return {"ok": True, "reply": out.get("text") or "", "api": out}
 
 
+@app.post("/loop/debug-chat")
+async def loop_debug_chat(request: Request):
+    route = main_chain()[0] if main_chain() else None
+    if not route:
+        raise HTTPException(status_code=503, detail="no main_chain configured")
+    messages = build_messages("hello", before_id=None, session_id="debug", use_context=False)
+    body = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 50, "stream": False}
+    req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
+    for hk, hv in (route.get("headers") or {}).items():
+        if str(hk) and str(hv):
+            req_headers[str(hk)] = str(hv)
+    url = route["url"].rstrip("/") + "/chat/completions"
+    async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+        resp = await client.post(url, headers=req_headers, json=body)
+    resp_body = None
+    try:
+        resp_body = resp.json()
+    except Exception:
+        resp_body = resp.text[:2000]
+    return {"status": resp.status_code, "url": url, "request_model": body["model"], "request_messages_count": len(messages), "response_headers": dict(resp.headers), "response_body": resp_body}
+
+
 @app.post("/loop/ingest")
 async def loop_ingest(request: Request):
     body = await request.json()

@@ -998,6 +998,12 @@ async def set_loop_config(request: Request):
     return loop_json("/loop/config", method="POST", body=await request.json())
 
 
+@app.post("/app/debug-chat")
+async def app_debug_chat(request: Request):
+    check_auth(request)
+    return loop_json("/loop/debug-chat", method="POST", body=await request.json())
+
+
 @app.get("/app/sessions")
 async def app_sessions(request: Request):
     check_auth(request)
