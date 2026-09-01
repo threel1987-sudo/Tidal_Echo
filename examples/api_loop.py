@@ -547,7 +547,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         })
                     out = await stream_chat(route, messages, sink)
                 except HTTPException as exc:
-                    if exc.status_code not in {400, 404, 405, 422} | FALLBACK_CODES:
+                    if exc.status_code not in FALLBACK_CODES:
                         raise
                     out = await complete_chat(route, messages)
             else:
@@ -574,7 +574,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     else:
                         out = {"text": "", "usage": {}}
                 except HTTPException as exc:
-                    if not tools or exc.status_code not in {400, 404, 405, 422}:
+                    if not tools or exc.status_code not in {404, 405, 422}:
                         raise
                     if emit_stream and STREAM_OUTPUT:
                         async def sink(chunk: str) -> None:
@@ -702,26 +702,27 @@ async def loop_debug_chat(request: Request):
         raise HTTPException(status_code=503, detail="no main_chain configured")
     prompt = str(params.get("prompt") or params.get("text") or "hello")
     with_tools = bool(params.get("with_tools", False))
-    messages = build_messages(prompt, before_id=None, session_id="debug", use_context=False)
-    body: dict[str, Any] = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 200, "stream": False}
+    tools: list[dict[str, Any]] = []
     if with_tools:
         tools = await mcp_tools()
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = "auto"
+    messages = build_messages(prompt, before_id=None, session_id="debug", use_context=False)
+    body: dict[str, Any] = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 200, "stream": False}
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = "auto"
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
             req_headers[str(hk)] = str(hv)
     url = route["url"].rstrip("/") + "/chat/completions"
-    async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+    async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
         resp = await client.post(url, headers=req_headers, json=body)
     resp_body = None
     try:
         resp_body = resp.json()
     except Exception:
         resp_body = resp.text[:2000]
-    return {"status": resp.status_code, "url": url, "request_model": body["model"], "tools_count": len(tools) if with_tools else 0, "tool_names": [t["function"]["name"] for t in body.get("tools", [])] if with_tools else None, "response_headers": dict(resp.headers), "response_body": resp_body}
+    return {"status": resp.status_code, "url": url, "request_model": body["model"], "tools_count": len(tools), "tool_names": [t["function"]["name"] for t in body.get("tools", [])], "response_headers": dict(resp.headers), "response_body": resp_body}
 
 
 @app.get("/loop/debug-mcp")
