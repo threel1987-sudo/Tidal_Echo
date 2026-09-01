@@ -370,9 +370,15 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
             headers=req_headers,
             json=body,
         ) as resp:
-            if resp.status_code in FALLBACK_CODES:
-                raise HTTPException(status_code=resp.status_code, detail="fallback")
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                err_detail = ""
+                try:
+                    lines = [line async for line in resp.aiter_lines()]
+                    body_text = "\n".join(lines)[:500]
+                    err_detail = body_text or str(resp.status_code)
+                except Exception:
+                    err_detail = str(resp.status_code)
+                raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
             async for line in resp.aiter_lines():
                 line = line.strip()
                 if not line.startswith("data:"):
@@ -501,9 +507,13 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
             headers=req_headers,
             json=body,
         )
-    if resp.status_code in FALLBACK_CODES:
-        raise HTTPException(status_code=resp.status_code, detail="fallback")
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        err_detail = ""
+        try:
+            err_detail = json.dumps(resp.json(), ensure_ascii=False)
+        except Exception:
+            err_detail = resp.text[:500] or "fallback"
+        raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
     data = resp.json()
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
     return {"text": (msg.get("content") or "").strip(), "message": msg, "usage": data.get("usage") or {}}
@@ -526,15 +536,20 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
         try:
             tools = await mcp_tools()
             if emit_stream and STREAM_OUTPUT and not tools:
-                async def sink(chunk: str) -> None:
-                    await relay_out({
-                        "type": "reply_delta",
-                        "stream_id": stream_id,
-                        "text": chunk,
-                        "done": False,
-                        "api_session": session_id,
-                    })
-                out = await stream_chat(route, messages, sink)
+                try:
+                    async def sink(chunk: str) -> None:
+                        await relay_out({
+                            "type": "reply_delta",
+                            "stream_id": stream_id,
+                            "text": chunk,
+                            "done": False,
+                            "api_session": session_id,
+                        })
+                    out = await stream_chat(route, messages, sink)
+                except HTTPException as exc:
+                    if exc.status_code not in {400, 404, 405, 422} | FALLBACK_CODES:
+                        raise
+                    out = await complete_chat(route, messages)
             else:
                 base_messages = messages[:]
                 try:
