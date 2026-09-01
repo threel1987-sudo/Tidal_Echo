@@ -573,6 +573,7 @@
   /* 发送中:小时钟,转完即送达 → 同位换成 ✓✓ */
   .meta .tick.clock{ color: var(--tick); }
   .meta .tick.clock svg{ width: 1.05em; height: 1.05em; vertical-align: -0.18em; }
+  .meta .tok{ margin-left:5px; opacity:.65; font-size:.9em; }
 
   /* ── thinking ── collapsed follows AI bubble; expanded becomes a quiet reading section ── */
   .row.think{
@@ -1916,7 +1917,7 @@
       <button class="topbtn sessions" id="sessionBtn" type="button" aria-label="API 窗口" title="API 窗口">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="14" height="14" rx="3"/><path d="M8 3h9a4 4 0 0 1 4 4v9"/></svg>
       </button>
-      <button class="topbtn terminal" id="terminalBtn" type="button" aria-label="终端视图" title="终端视图">
+      <button class="topbtn terminal" id="terminalBtn" type="button" aria-label="终端视图" title="终端视图" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 8 4 4-4 4"/><path d="M12 16h6"/></svg>
       </button>
       <button class="topbtn call" id="callBtn" type="button" aria-label="语音通话（占位）" title="语音通话">
@@ -1966,7 +1967,7 @@
 </div>
 
 <!-- ── Terminal renderer (same conversation, different skin) ── -->
-<section class="terminal-panel" id="terminalPanel" aria-label="终端视图" aria-hidden="true">
+<section class="terminal-panel" id="terminalPanel" aria-label="终端视图" aria-hidden="true" style="display:none">
   <header class="terminal-top">
     <button class="terminal-back" id="terminalBack" type="button" aria-label="返回聊天">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
@@ -2158,42 +2159,7 @@
         </div>
       </section>
 
-      <!-- reset（占位 · 假按键）-->
-      <button class="action-row" id="resetRow" type="button">
-        <span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/></svg></span>
-        <span class="action-name">reset</span>
-        <span class="action-value">点击后开启新窗口</span>
-        <span class="action-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
-      </button>
 
-      <!-- swap（占位 · 假按键）-->
-      <button class="action-row" id="swapRow" type="button">
-        <span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"/><path d="M3 8h13a4 4 0 0 1 4 4"/><path d="m17 20 4-4-4-4"/><path d="M21 16H8a4 4 0 0 1-4-4"/></svg></span>
-        <span class="action-name">swap</span>
-        <span class="action-value">切换至上一个 resume</span>
-        <span class="action-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
-      </button>
-
-      <button class="action-row hidden" id="resumeRow" type="button">
-        <span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.7-5.7"/><path d="M18 3v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.7"/><path d="M6 21v-4h4"/></svg></span>
-        <span class="action-name">resume</span>
-        <span class="action-value">继续 pending task</span>
-        <span class="action-chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
-      </button>
-
-      <!-- status -->
-      <div class="action-row status">
-        <span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></span>
-        <span class="action-name">status</span>
-        <span class="status-main">
-          <span class="status-used" id="statusUsed">used 96k / 200k</span>
-          <span class="status-sid"><span id="statusSid">sid: a9f3…</span>
-            <button class="status-copy" id="statusCopy" type="button" aria-label="复制 sid">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
-            </button>
-          </span>
-        </span>
-      </div>
     </div>
     <input type="file" id="avatarInput" accept="image/*" class="hidden">
   </div>
@@ -4843,8 +4809,16 @@ function findRenderedMessageRow(key){
   return scrollEl.querySelector(`[data-message-key="${cssEscape(key)}"]`);
 }
 
-function fillMeta(metaEl, ts, isAn){
-  metaEl.innerHTML = `<span>${fmtTime(ts)}</span>` + (isAn ? `<span class="tick">✓✓</span>` : "");
+function fillMeta(metaEl, ts, isAn, usage){
+  let html = `<span>${fmtTime(ts)}</span>`;
+  if (isAn) html += `<span class="tick">✓✓</span>`;
+  if (!isAn && usage) {
+    const out = Number(usage.output_tokens || 0);
+    const inp = Number(usage.input_tokens || 0);
+    if (out > 0) html += `<span class="tok">${out.toLocaleString()} tok</span>`;
+    else if (inp > 0) html += `<span class="tok">${inp.toLocaleString()} in</span>`;
+  }
+  metaEl.innerHTML = html;
 }
 // 发送中的小时钟:两根指针绕表心转(SMIL,旋转中心写死(12,12),不依赖 transform-box,iOS 稳)。
 // reduce-motion 时给一只静止的钟。状态转 sent 后此节点按签名重建 → 同位换成 ✓✓。
@@ -5122,7 +5096,7 @@ function makeMessage(rowData){
       inputEl.dispatchEvent(new Event("input"));
       doSend();
     });
-  }else fillMeta(metaEl, m.ts, m.from === "human");
+  }else fillMeta(metaEl, m.ts, m.from === "human", m.meta && m.meta.api && m.meta.api.usage);
   row.appendChild(bubble);
   // reaction chips — AI poke (one-way: AI → you), rendered only under your own bubbles; not under the AI's
   const reactions = (m.from === "human" && m.meta && m.meta.reactions && typeof m.meta.reactions === "object") ? m.meta.reactions : null;
