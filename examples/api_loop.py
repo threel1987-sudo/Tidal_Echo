@@ -61,6 +61,8 @@ TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
 STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 
+_TOOLS_UNSUPPORTED_ROUTES: set[tuple[str, str]] = set()
+
 if not PERSONA and PERSONA_FILE:
     try:
         PERSONA = Path(PERSONA_FILE).read_text(encoding="utf-8").strip()
@@ -311,6 +313,7 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
             new_chain.append(entry)
         if new_chain:
             cfg["main_chain"] = new_chain
+            _TOOLS_UNSUPPORTED_ROUTES.clear()
     if isinstance(body.get("mcp_servers"), list):
         old = mcp_servers()
         new_servers = []
@@ -329,6 +332,7 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=400, detail=f"MCP row {pos + 1}: url required")
             new_servers.append(entry)
         cfg["mcp_servers"] = new_servers
+        _TOOLS_UNSUPPORTED_ROUTES.clear()
     save_config(cfg)
     return public_config()
 
@@ -535,6 +539,9 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
         tried.append(route.get("model"))
         try:
             tools = await mcp_tools()
+            route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
+            if route_key in _TOOLS_UNSUPPORTED_ROUTES:
+                tools = []
             if emit_stream and STREAM_OUTPUT and not tools:
                 try:
                     async def sink(chunk: str) -> None:
@@ -574,20 +581,26 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     else:
                         out = {"text": "", "usage": {}}
                 except HTTPException as exc:
-                    if not tools or exc.status_code not in {404, 405, 422}:
+                    if exc.status_code == 400 and tools:
+                        _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
+                    if not tools or exc.status_code not in {400, 404, 405, 422}:
                         raise
                     if emit_stream and STREAM_OUTPUT:
-                        async def sink(chunk: str) -> None:
-                            await relay_out({
-                                "type": "reply_delta",
-                                "stream_id": stream_id,
-                                "text": chunk,
-                                "done": False,
-                                "api_session": session_id,
-                            })
-                        out = await stream_chat(route, base_messages, sink)
+                        try:
+                            async def sink(chunk: str) -> None:
+                                await relay_out({
+                                    "type": "reply_delta",
+                                    "stream_id": stream_id,
+                                    "text": chunk,
+                                    "done": False,
+                                    "api_session": session_id,
+                                })
+                            out = await stream_chat(route, base_messages, sink)
+                        except HTTPException:
+                            out = await complete_chat(route, base_messages)
                     else:
                         out = await complete_chat(route, base_messages)
+                    out["tools_unavailable"] = True
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
@@ -608,6 +621,8 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
     if not reply:
         error = str(out.get("error") or "").strip()
         reply = f"API 调用失败：{error}" if error else "API 未返回回复内容。"
+    if out.get("tools_unavailable"):
+        reply = "（工具暂不可用：当前上游 LLM 提供方不支持 function calling，已自动切换为纯文本模式。）\n\n" + reply
     meta = {
         "runtime": "api_loop",
         "model": out.get("model"),
