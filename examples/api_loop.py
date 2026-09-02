@@ -654,6 +654,7 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
         raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
     data = resp.json()
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
+    print(f"[api_loop:complete_chat] msg_keys={list(msg.keys())}, has_reasoning_content={bool(msg.get('reasoning_content'))}, has_thinking={bool(msg.get('thinking'))}, has_tool_calls={bool(msg.get('tool_calls'))}")
     thinking = []
     content = msg.get("content")
     
@@ -885,8 +886,7 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         "usage": out.get("usage") or {},
         "session": session_id,
     }
-    import logging
-    logging.info(f"[api_loop] model={out.get('model')}, has_thinking={bool(out.get('thinking'))}, has_tool_calls={bool(out.get('tool_calls'))}")
+    print(f"[api_loop:handle_ingest] model={out.get('model')}, has_thinking={bool(out.get('thinking'))}, has_tool_calls={bool(out.get('tool_calls'))}")
     if out.get("thinking"):
         meta["thinking"] = out["thinking"]
     if out.get("tool_calls"):
