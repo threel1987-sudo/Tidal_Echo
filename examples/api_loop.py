@@ -624,7 +624,7 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
         "messages": messages,
         "temperature": temperature(),
         "max_tokens": max_tokens(),
-        "stream": False,
+        "stream": True,
     }
     tp = top_p()
     if tp is not None:
@@ -639,70 +639,102 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
             req_headers[str(hk)] = str(hv)
+
+    text_parts: list[str] = []
+    thinking_blocks: list[dict[str, Any]] = []
+    tool_calls_buf: list[dict[str, Any]] = []
+    usage: dict[str, Any] = {}
+    raw_msg: dict[str, Any] = {}
+
     async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
-        resp = await client.post(
+        async with client.stream(
+            "POST",
             route["url"].rstrip("/") + "/chat/completions",
             headers=req_headers,
             json=body,
-        )
-    if resp.status_code >= 400:
-        err_detail = ""
+        ) as resp:
+            if resp.status_code >= 400:
+                err_detail = ""
+                try:
+                    lines = [line async for line in resp.aiter_lines()]
+                    body_text = "\n".join(lines)[:500]
+                    err_detail = body_text or str(resp.status_code)
+                except Exception:
+                    err_detail = str(resp.status_code)
+                raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line.startswith("data:"):
+                    continue
+                data_str = line[5:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    ev = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(ev.get("usage"), dict):
+                    usage = ev["usage"]
+                delta = (((ev.get("choices") or [{}])[0]).get("delta") or {})
+                if delta.get("role"):
+                    raw_msg["role"] = delta["role"]
+                chunk = delta.get("content") or ""
+                if chunk:
+                    text_parts.append(chunk)
+                if delta.get("reasoning_content"):
+                    thinking_blocks.append({"content": delta["reasoning_content"]})
+                elif delta.get("type") == "thinking":
+                    thinking_blocks.append({"content": delta.get("thinking") or delta.get("content") or ""})
+                elif delta.get("thinking"):
+                    thinking_blocks.append({"content": delta["thinking"]})
+                elif ev.get("thinking"):
+                    thinking_blocks.append({"content": ev["thinking"]})
+                if delta.get("tool_calls"):
+                    for tc in delta["tool_calls"]:
+                        idx = tc.get("index", 0)
+                        func = tc.get("function") or {}
+                        while len(tool_calls_buf) <= idx:
+                            tool_calls_buf.append({"id": "", "name": "", "arguments_buf": ""})
+                        if tc.get("id"):
+                            tool_calls_buf[idx]["id"] = tc["id"]
+                        if func.get("name"):
+                            tool_calls_buf[idx]["name"] = func["name"]
+                        if func.get("arguments"):
+                            tool_calls_buf[idx]["arguments_buf"] += func["arguments"]
+
+    merged_thinking = []
+    if thinking_blocks:
+        merged = "".join(b.get("content", "") for b in thinking_blocks)
+        if merged.strip():
+            merged_thinking.append({"content": merged})
+
+    tool_calls_parsed: list[dict[str, Any]] = []
+    raw_tool_calls = []
+    for tc in tool_calls_buf:
         try:
-            err_detail = json.dumps(resp.json(), ensure_ascii=False)
-        except Exception:
-            err_detail = resp.text[:500] or "fallback"
-        raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
-    data = resp.json()
-    msg = ((data.get("choices") or [{}])[0]).get("message") or {}
-    print(f"[api_loop:complete_chat] msg_keys={list(msg.keys())}, has_reasoning_content={bool(msg.get('reasoning_content'))}, has_thinking={bool(msg.get('thinking'))}, has_tool_calls={bool(msg.get('tool_calls'))}")
-    thinking = []
-    content = msg.get("content")
-    
-    # DeepSeek/OpenAI reasoning_content field (KEY FIELD!)
-    if msg.get("reasoning_content"):
-        thinking.append({"content": msg.get("reasoning_content") or ""})
-    
-    # OpenAI extended thinking: content array with type="thinking"
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "thinking":
-                thinking.append({"content": block.get("thinking") or block.get("text") or ""})
-    
-    # Anthropic thinking: top-level thinking field in message
-    if msg.get("thinking"):
-        thinking.append({"content": msg.get("thinking") or ""})
-    
-    # Custom format: top-level thinking field in response data
-    if data.get("thinking"):
-        if isinstance(data["thinking"], str):
-            thinking.append({"content": data["thinking"]})
-        elif isinstance(data["thinking"], list):
-            for t in data["thinking"]:
-                if isinstance(t, dict):
-                    thinking.append({"content": t.get("content") or t.get("thinking") or t.get("text") or ""})
-                elif isinstance(t, str):
-                    thinking.append({"content": t})
-    
-    tool_calls_raw = msg.get("tool_calls") or []
-    tool_calls = []
-    for tc in tool_calls_raw:
-        if not isinstance(tc, dict):
-            continue
-        func = tc.get("function", {})
-        name = func.get("name") or ""
-        args_str = func.get("arguments") or "{}"
-        try:
-            args = json.loads(args_str) if isinstance(args_str, str) else args_str
-        except json.JSONDecodeError:
+            args = json.loads(tc.get("arguments_buf") or "{}")
+        except (json.JSONDecodeError, TypeError):
             args = {}
-        tool_calls.append({"name": name, "input": args})
-    final_text = (msg.get("content") or "").strip() if isinstance(msg.get("content"), str) else ""
+        tool_calls_parsed.append({"name": tc.get("name", ""), "input": args})
+        raw_tool_calls.append({
+            "id": tc.get("id", ""),
+            "type": "function",
+            "function": {"name": tc.get("name", ""), "arguments": tc.get("arguments_buf", "{}")}
+        })
+
+    final_text = "".join(text_parts).strip()
+    if "role" not in raw_msg:
+        raw_msg["role"] = "assistant"
+    raw_msg["content"] = final_text
+    if raw_tool_calls:
+        raw_msg["tool_calls"] = raw_tool_calls
+    print(f"[api_loop:complete_chat] has_reasoning_content={bool(thinking_blocks)}, has_tool_calls={bool(tool_calls_parsed)}, text_len={len(final_text)}")
     return {
         "text": final_text,
-        "message": msg,
-        "usage": data.get("usage") or {},
-        "thinking": thinking if thinking else None,
-        "tool_calls": tool_calls if tool_calls else None
+        "message": raw_msg,
+        "usage": usage,
+        "thinking": merged_thinking if merged_thinking else None,
+        "tool_calls": tool_calls_parsed if tool_calls_parsed else None
     }
 
 
