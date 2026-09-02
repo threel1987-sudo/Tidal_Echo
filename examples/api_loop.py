@@ -829,6 +829,8 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
             route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
             use_prompt_tools = (route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)) if not FORCE_NATIVE_TOOLS else False
             native_tools = [] if use_prompt_tools else all_tools
+            tool_names = [t.get("function", {}).get("name", "") for t in native_tools] if native_tools else []
+            print(f"[api_loop:run_model] mcp_tools={len(all_tools)}, native_tools={len(native_tools)}, prompt_tools={use_prompt_tools}, tool_names={tool_names[:5]}")
             if use_prompt_tools:
                 out = await _prompt_tool_loop(route, messages, all_tools)
             elif emit_stream and STREAM_OUTPUT and not native_tools:
