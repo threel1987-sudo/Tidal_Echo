@@ -63,6 +63,7 @@ FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 FORCE_NATIVE_TOOLS = os.environ.get("FORCE_NATIVE_TOOLS", "0").lower() in {"1", "true", "yes"}
 
 _TOOLS_UNSUPPORTED_ROUTES: set[tuple[str, str]] = set()
+_THINKING_TOOLS_CONFLICT: set[tuple[str, str]] = set()
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
 
 if not PERSONA and PERSONA_FILE:
@@ -618,7 +619,7 @@ async def mcp_tools() -> list[dict[str, Any]]:
     return tools
 
 
-async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, disable_thinking: bool = False) -> dict[str, Any]:
     body = {
         "model": route["model"],
         "messages": messages,
@@ -630,7 +631,7 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     if tp is not None:
         body["top_p"] = tp
     budget = thinking_budget()
-    if budget > 0:
+    if budget > 0 and not disable_thinking:
         body["thinking"] = {"type": "enabled", "budget_tokens": budget}
     if tools:
         body["tools"] = tools
@@ -829,8 +830,9 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
             route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
             use_prompt_tools = (route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)) if not FORCE_NATIVE_TOOLS else False
             native_tools = [] if use_prompt_tools else all_tools
+            suppress_thinking = (route_key in _THINKING_TOOLS_CONFLICT and bool(native_tools) and thinking_budget() > 0)
             tool_names = [t.get("function", {}).get("name", "") for t in native_tools] if native_tools else []
-            print(f"[api_loop:run_model] mcp_tools={len(all_tools)}, native_tools={len(native_tools)}, prompt_tools={use_prompt_tools}, tool_names={tool_names[:5]}")
+            print(f"[api_loop:run_model] mcp_tools={len(all_tools)}, native_tools={len(native_tools)}, prompt_tools={use_prompt_tools}, suppress_thinking={suppress_thinking}, tool_names={tool_names[:5]}")
             if use_prompt_tools:
                 out = await _prompt_tool_loop(route, messages, all_tools)
             elif emit_stream and STREAM_OUTPUT and not native_tools:
@@ -854,7 +856,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                 first_thinking = None
                 try:
                     for round_idx in range(8):
-                        out = await complete_chat(route, messages, native_tools)
+                        out = await complete_chat(route, messages, native_tools, disable_thinking=suppress_thinking)
                         if round_idx == 0 and out.get("thinking"):
                             first_thinking = out["thinking"]
                         msg = out.get("message") or {}
@@ -883,12 +885,48 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     if first_thinking and not out.get("thinking"):
                         out["thinking"] = first_thinking
                 except HTTPException as exc:
+                    print(f"[api_loop:run_model] tool-loop exception: HTTP {exc.status_code}, native_tools={len(native_tools)}, suppress_thinking={suppress_thinking}, detail={str(exc.detail)[:200]}")
                     if exc.status_code == 400 and native_tools and not FORCE_NATIVE_TOOLS:
-                        _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
-                        try:
-                            out = await _prompt_tool_loop(route, base_messages, all_tools)
-                        except Exception:
-                            out = await complete_chat(route, base_messages)
+                        if thinking_budget() > 0 and not suppress_thinking:
+                            print(f"[api_loop:run_model] thinking+tools conflict detected, retrying without thinking: {route_key}")
+                            _THINKING_TOOLS_CONFLICT.add(route_key)
+                            try:
+                                messages = base_messages[:]
+                                tool_calls_collected = []
+                                for round_idx in range(8):
+                                    out = await complete_chat(route, messages, native_tools, disable_thinking=True)
+                                    msg = out.get("message") or {}
+                                    calls = msg.get("tool_calls") or []
+                                    if not calls and isinstance(msg.get("function_call"), dict):
+                                        calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
+                                    if not calls:
+                                        break
+                                    messages.append(msg)
+                                    for call in calls:
+                                        fn = call.get("function") or {}
+                                        tool_name = str(fn.get("name") or "")
+                                        try:
+                                            args = json.loads(fn.get("arguments") or "{}")
+                                            result = await execute_mcp_tool(tool_name, args)
+                                            content_str = json.dumps(result, ensure_ascii=False)
+                                            tool_calls_collected.append({"name": tool_name, "input": args, "result": result, "status": "success"})
+                                        except Exception as e2:
+                                            content_str = json.dumps({"error": str(e2)}, ensure_ascii=False)
+                                            tool_calls_collected.append({"name": tool_name, "input": args, "result": {"error": str(e2)}, "status": "error"})
+                                        messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content_str})
+                                else:
+                                    out = {"text": "", "usage": {}}
+                                if tool_calls_collected:
+                                    out["tool_calls"] = tool_calls_collected
+                            except Exception:
+                                out = await complete_chat(route, base_messages)
+                        else:
+                            print(f"[api_loop:run_model] marking route as tools-unsupported: {route_key}")
+                            _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
+                            try:
+                                out = await _prompt_tool_loop(route, base_messages, all_tools)
+                            except Exception:
+                                out = await complete_chat(route, base_messages)
                     elif not native_tools or exc.status_code not in {404, 405, 422}:
                         raise
                     else:
@@ -961,10 +999,11 @@ async def healthz():
 
 @app.post("/loop/clear-unsupported")
 async def clear_unsupported():
-    """Clear the unsupported routes cache"""
-    count = len(_TOOLS_UNSUPPORTED_ROUTES)
+    count_tools = len(_TOOLS_UNSUPPORTED_ROUTES)
+    count_thinking = len(_THINKING_TOOLS_CONFLICT)
     _TOOLS_UNSUPPORTED_ROUTES.clear()
-    return {"ok": True, "cleared": count, "message": f"Cleared {count} unsupported route(s)"}
+    _THINKING_TOOLS_CONFLICT.clear()
+    return {"ok": True, "cleared_tools": count_tools, "cleared_thinking": count_thinking}
 
 
 
