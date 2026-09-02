@@ -880,6 +880,7 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         meta["thinking"] = out["thinking"]
     if out.get("tool_calls"):
         meta["tool_calls"] = out["tool_calls"]
+        print(f"[DEBUG handle_ingest] tool_calls detail: {json.dumps(out['tool_calls'], ensure_ascii=False, indent=2)}")
     print(f"[DEBUG handle_ingest] meta keys: {list(meta.keys())}, thinking={bool(out.get('thinking'))}, tool_calls={bool(out.get('tool_calls'))}")
     if dry:
         return {"ok": True, "reply": reply, "api": meta}
