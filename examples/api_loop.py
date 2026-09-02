@@ -750,7 +750,9 @@ async def _prompt_tool_loop(route: dict[str, Any], messages: list[dict[str, Any]
         out = await complete_chat(route, messages)
         text = out.get("text") or ""
         last_out = out
+        print(f"[DEBUG _prompt_tool_loop] round text preview: {text[:200]}")
         matches = list(_TOOL_CALL_RE.finditer(text))
+        print(f"[DEBUG _prompt_tool_loop] found {len(matches)} tool_call matches")
         if not matches:
             break
         for m in matches:
