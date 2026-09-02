@@ -575,6 +575,56 @@
   .meta .tick.clock svg{ width: 1.05em; height: 1.05em; vertical-align: -0.18em; }
   .meta .tok{ margin-left:5px; opacity:.65; font-size:.9em; }
 
+  /* ── thinking & tool-call inline blocks (above AI bubble) ── */
+  .inline-think, .inline-tool{
+    margin-bottom: 8px;
+    border-radius: 10px;
+    background: var(--field-bg);
+    border: 1px solid var(--card-line);
+    overflow: hidden;
+  }
+  .inline-think-head, .inline-tool-head{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+  .inline-think-head:hover, .inline-tool-head:hover{ background: rgba(125,128,135,.06); }
+  .inline-think-icon, .inline-tool-icon{ flex: 0 0 auto; width: 16px; height: 16px; opacity: .8; }
+  .inline-think-label, .inline-tool-label{ flex: 1; font-weight: 500; }
+  .inline-think-meta, .inline-tool-meta{ flex: 0 0 auto; opacity: .7; font-size: 11px; }
+  .inline-think-chevron, .inline-tool-chevron{
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    transition: transform .2s;
+  }
+  .inline-think.open .inline-think-chevron,
+  .inline-tool.open .inline-tool-chevron{ transform: rotate(90deg); }
+  .inline-think-body, .inline-tool-body{
+    display: none;
+    padding: 10px 12px;
+    border-top: 1px solid var(--card-line);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-soft);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .inline-think.open .inline-think-body,
+  .inline-tool.open .inline-tool-body{ display: block; }
+  .inline-tool-item{ margin-bottom: 12px; }
+  .inline-tool-item:last-child{ margin-bottom: 0; }
+  .inline-tool-name{ font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .inline-tool-section{ margin-top: 6px; }
+  .inline-tool-section-title{ font-weight: 500; opacity: .7; margin-bottom: 3px; }
+
   /* ── thinking ── collapsed follows AI bubble; expanded becomes a quiet reading section ── */
   .row.think{
     justify-content: flex-start;
@@ -5064,6 +5114,60 @@ function makeAct(rowData){
   row.appendChild(block);
   return row;
 }
+function makeInlineThinking(thinkingBlocks, msgKey){
+  const div = document.createElement("div");
+  div.className = "inline-think";
+  const content = thinkingBlocks.map(b => b.content || "").join("\n\n");
+  const timeHint = thinkingBlocks.length > 1 ? `${thinkingBlocks.length} 段` : "";
+  div.innerHTML = `
+    <div class="inline-think-head">
+      <svg class="inline-think-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      <span class="inline-think-label">深度思考</span>
+      <span class="inline-think-meta">${timeHint}</span>
+      <svg class="inline-think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+    <div class="inline-think-body">${escapeHtml(content)}</div>
+  `;
+  const head = div.querySelector(".inline-think-head");
+  head.addEventListener("click", () => {
+    div.classList.toggle("open");
+  });
+  return div;
+}
+function makeInlineToolCalls(toolCalls, msgKey){
+  const div = document.createElement("div");
+  div.className = "inline-tool";
+  const itemsHtml = toolCalls.map(tc => {
+    const name = tc.name || "unknown";
+    const input = typeof tc.input === "string" ? tc.input : JSON.stringify(tc.input || {}, null, 2);
+    const result = tc.result ? (typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result, null, 2)) : "";
+    return `<div class="inline-tool-item">
+      <div class="inline-tool-name">${escapeHtml(name)}</div>
+      <div class="inline-tool-section">
+        <div class="inline-tool-section-title">参数</div>
+        <div>${escapeHtml(input)}</div>
+      </div>
+      ${result ? `<div class="inline-tool-section">
+        <div class="inline-tool-section-title">结果</div>
+        <div>${escapeHtml(result)}</div>
+      </div>` : ""}
+    </div>`;
+  }).join("");
+  div.innerHTML = `
+    <div class="inline-tool-head">
+      <svg class="inline-tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      <span class="inline-tool-label">调用工具</span>
+      <span class="inline-tool-meta">${toolCalls.length} 个</span>
+      <svg class="inline-tool-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+    <div class="inline-tool-body">${itemsHtml}</div>
+  `;
+  const head = div.querySelector(".inline-tool-head");
+  head.addEventListener("click", () => {
+    div.classList.toggle("open");
+  });
+  return div;
+}
 function makeMessage(rowData){
   const m = rowData.message;
   const row = document.createElement("div");
@@ -5085,6 +5189,18 @@ function makeMessage(rowData){
   _inner += `<span class="meta"></span>`;
   bubble.innerHTML = _inner;
   if (atts.length){ bubble.classList.add("has-att"); if (!m.text) bubble.classList.add("att-only"); }
+  
+  if (m.from === "ai" && m.meta && m.meta.api){
+    if (m.meta.api.thinking && m.meta.api.thinking.length > 0){
+      const thinkDiv = makeInlineThinking(m.meta.api.thinking, m._key);
+      row.appendChild(thinkDiv);
+    }
+    if (m.meta.api.tool_calls && m.meta.api.tool_calls.length > 0){
+      const toolDiv = makeInlineToolCalls(m.meta.api.tool_calls, m._key);
+      row.appendChild(toolDiv);
+    }
+  }
+  
   const metaEl = bubble.querySelector(".meta");
   if (m.status === "sending") metaEl.innerHTML = `<span>${fmtTime(m.ts)}</span>` + sendingTickHtml();
   else if (m.status === "failed"){

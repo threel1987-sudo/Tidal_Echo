@@ -443,6 +443,8 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
         body["thinking"] = {"type": "enabled", "budget_tokens": budget}
     text_parts: list[str] = []
     usage: dict[str, Any] = {}
+    thinking_blocks: list[dict[str, Any]] = []
+    tool_calls: list[dict[str, Any]] = []
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
@@ -481,7 +483,19 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
                 if chunk:
                     text_parts.append(chunk)
                     await sink(chunk)
-    return {"text": "".join(text_parts).strip(), "usage": usage}
+                if delta.get("type") == "thinking":
+                    thinking_blocks.append({"content": delta.get("thinking") or ""})
+                if delta.get("type") == "tool_use":
+                    tool_calls.append({
+                        "name": delta.get("name") or "",
+                        "input": delta.get("input") or {}
+                    })
+    return {
+        "text": "".join(text_parts).strip(),
+        "usage": usage,
+        "thinking": thinking_blocks if thinking_blocks else None,
+        "tool_calls": tool_calls if tool_calls else None
+    }
 
 
 MCP_SESSIONS: dict[str, str] = {}
@@ -610,7 +624,20 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
         raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
     data = resp.json()
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
-    return {"text": (msg.get("content") or "").strip(), "message": msg, "usage": data.get("usage") or {}}
+    thinking = []
+    if isinstance(msg.get("content"), list):
+        for block in msg["content"]:
+            if isinstance(block, dict) and block.get("type") == "thinking":
+                thinking.append({"content": block.get("thinking") or ""})
+    tool_calls_raw = msg.get("tool_calls") or []
+    tool_calls = [{"name": tc.get("function", {}).get("name") or "", "input": tc.get("function", {}).get("arguments") or {}} for tc in tool_calls_raw if isinstance(tc, dict)]
+    return {
+        "text": (msg.get("content") or "").strip(),
+        "message": msg,
+        "usage": data.get("usage") or {},
+        "thinking": thinking if thinking else None,
+        "tool_calls": tool_calls if tool_calls else None
+    }
 
 
 async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -659,6 +686,7 @@ async def _prompt_tool_loop(route: dict[str, Any], messages: list[dict[str, Any]
     else:
         messages.insert(0, {"role": "system", "content": _prompt_tools_block(tools)})
     last_out: dict[str, Any] = {"text": "", "usage": {}}
+    tool_calls_collected: list[dict[str, Any]] = []
     for _ in range(max_rounds):
         out = await complete_chat(route, messages)
         text = out.get("text") or ""
@@ -675,8 +703,10 @@ async def _prompt_tool_loop(route: dict[str, Any], messages: list[dict[str, Any]
                     tool_args = {}
                 result = await execute_mcp_tool(tool_name, tool_args)
                 result_str = json.dumps(result, ensure_ascii=False)
+                tool_calls_collected.append({"name": tool_name, "input": tool_args, "result": result})
             except Exception as exc:
                 result_str = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                tool_calls_collected.append({"name": tool_name, "input": tool_args, "result": {"error": str(exc)}})
             messages.append({"role": "assistant", "content": text})
             messages.append({"role": "user", "content": f"<tool_result name=\"{tool_name}\">{result_str}</tool_result>"})
             text = ""
@@ -686,6 +716,8 @@ async def _prompt_tool_loop(route: dict[str, Any], messages: list[dict[str, Any]
     final_text = _TOOL_CALL_RE.sub("", final_text).strip()
     if final_text != last_out.get("text"):
         last_out["text"] = final_text
+    if tool_calls_collected:
+        last_out["tool_calls"] = tool_calls_collected
     return last_out
 
 
@@ -777,6 +809,10 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         "usage": out.get("usage") or {},
         "session": session_id,
     }
+    if out.get("thinking"):
+        meta["thinking"] = out["thinking"]
+    if out.get("tool_calls"):
+        meta["tool_calls"] = out["tool_calls"]
     if dry:
         return {"ok": True, "reply": reply, "api": meta}
     if STREAM_OUTPUT:
