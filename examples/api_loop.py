@@ -842,8 +842,9 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     if tool_calls_collected:
                         out["tool_calls"] = tool_calls_collected
                 except HTTPException as exc:
-                    if exc.status_code == 400 and native_tools:
+                    if exc.status_code == 400 and native_tools and not FORCE_NATIVE_TOOLS:
                         _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
+                        print(f"[DEBUG] Added {route_key} to unsupported routes due to 400 error")
                         try:
                             out = await _prompt_tool_loop(route, base_messages, all_tools)
                         except Exception:
@@ -914,7 +915,18 @@ async def healthz():
         "history_n": history_n(),
         "relay_db": RELAY_DB,
         "relay_secret_loaded": bool(RELAY_SECRET),
+        "unsupported_routes": len(_TOOLS_UNSUPPORTED_ROUTES),
+        "force_native_tools": FORCE_NATIVE_TOOLS,
     }
+
+
+@app.post("/loop/clear-unsupported")
+async def clear_unsupported():
+    """Clear the unsupported routes cache"""
+    count = len(_TOOLS_UNSUPPORTED_ROUTES)
+    _TOOLS_UNSUPPORTED_ROUTES.clear()
+    return {"ok": True, "cleared": count, "message": f"Cleared {count} unsupported route(s)"}
+
 
 
 @app.get("/loop/config")
