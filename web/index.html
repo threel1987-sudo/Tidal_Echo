@@ -2,6 +2,20 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script>
+(function(){
+  var V="v8";
+  if(localStorage.getItem("te_ver")!==V&&"serviceWorker"in navigator){
+    localStorage.setItem("te_ver",V);
+    navigator.serviceWorker.getRegistrations().then(function(rs){
+      var p=rs.map(function(r){return r.unregister()});
+      Promise.all(p).then(function(){
+        return caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k)}))});
+      }).then(function(){location.reload()});
+    });
+  }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>Tidal Echo</title>
 
@@ -6503,9 +6517,22 @@ if (window.visualViewport){
   applyVV();
 }
 
-/* Service Worker */
+/* Service Worker — force update + reload when a new version is found */
 if ("serviceWorker" in navigator){
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "activated" && navigator.serviceWorker.controller){
+            location.reload();
+          }
+        });
+      });
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
+  });
 }
 
 init();

@@ -1038,6 +1038,18 @@ async def app_sessions_patch(session_id: str, request: Request):
 
 WEB_DIR = Path(os.environ.get("RELAY_WEB_DIR", str(Path(__file__).parent.parent / "web")))
 if WEB_DIR.is_dir():
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class NoCacheShellMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            response = await call_next(request)
+            p = request.url.path.rstrip("/")
+            if p.endswith("/sw.js") or p.endswith("/index.html") or p in ("", "/", "/chat"):
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+            return response
+
+    app.add_middleware(NoCacheShellMiddleware)
     app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
 
