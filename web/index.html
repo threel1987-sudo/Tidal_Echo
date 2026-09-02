@@ -2465,6 +2465,8 @@ const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTok
 const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), apiList = $("#apiList"), mcpList = $("#mcpList");
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
 const personaConfigView = $("#personaConfigView"), modelParamsConfigView = $("#modelParamsConfigView");
+const personaInput = $("#personaInput"), aiNameInput = $("#aiNameInput"), personaSaveBtn = $("#personaSaveBtn"), personaConfigHint = $("#personaConfigHint");
+const temperatureInput = $("#temperatureInput"), topPInput = $("#topPInput"), historyNInput = $("#historyNInput"), maxTokensInput = $("#maxTokensInput"), thinkingBudgetInput = $("#thinkingBudgetInput"), modelParamsSaveBtn = $("#modelParamsSaveBtn"), modelParamsConfigHint = $("#modelParamsConfigHint");
 let editingMcpIndex = null;
 
 /* ════════ 固定聊天背景 + 本地头像 ════════ */
@@ -3646,6 +3648,16 @@ async function loadLoopConfig(){
     }
     if (apiConfigHint) apiConfigHint.textContent = route.key_masked ? `已配置 Key：${route.key_masked}` : "尚未配置 API";
     if (mcpConfigHint) mcpConfigHint.textContent = "MCP Token 仅在输入时更新，留空保持原 Token";
+    
+    if (personaInput) personaInput.value = savedLoopConfig.persona || "";
+    if (aiNameInput) aiNameInput.value = savedLoopConfig.ai_name || "";
+    
+    if (temperatureInput) temperatureInput.value = savedLoopConfig.temperature != null ? savedLoopConfig.temperature : "";
+    if (topPInput) topPInput.value = savedLoopConfig.top_p != null ? savedLoopConfig.top_p : "";
+    if (historyNInput) historyNInput.value = savedLoopConfig.history_n != null ? savedLoopConfig.history_n : "";
+    if (maxTokensInput) maxTokensInput.value = savedLoopConfig.max_tokens != null ? savedLoopConfig.max_tokens : "";
+    if (thinkingBudgetInput) thinkingBudgetInput.value = savedLoopConfig.thinking_budget != null ? savedLoopConfig.thinking_budget : "";
+    
     resetMcpForm();
     renderApiList();
     renderMcpList();
@@ -3705,9 +3717,9 @@ async function loadModelParamsConfig(){
 $("#openPersonaConfigBtn")?.addEventListener("click", () => { setConfigView("persona"); loadPersonaConfig(); });
 $("#openModelParamsBtn")?.addEventListener("click", () => { setConfigView("model-params"); loadModelParamsConfig(); });
 $("#personaSaveBtn")?.addEventListener("click", async () => {
-  const hint = $("#personaConfigHint");
-  const persona = ($("#personaInput")?.value || "").trim();
-  const ai_name = ($("#aiNameInput")?.value || "").trim();
+  const hint = personaConfigHint;
+  const persona = (personaInput?.value || "").trim();
+  const ai_name = (aiNameInput?.value || "").trim();
   await saveLoopConfig({ persona, ai_name }, hint);
   if (ai_name) {
     const nameEl = document.querySelector(".peerpill .name");
@@ -3715,13 +3727,13 @@ $("#personaSaveBtn")?.addEventListener("click", async () => {
   }
 });
 $("#modelParamsSaveBtn")?.addEventListener("click", async () => {
-  const hint = $("#modelParamsConfigHint");
+  const hint = modelParamsConfigHint;
   const payload = {};
-  const tempVal = parseFloat($("#temperatureInput")?.value);
-  const toppVal = parseFloat($("#topPInput")?.value);
-  const histVal = parseInt($("#historyNInput")?.value);
-  const maxtVal = parseInt($("#maxTokensInput")?.value);
-  const thinkVal = parseInt($("#thinkingBudgetInput")?.value);
+  const tempVal = parseFloat(temperatureInput?.value);
+  const toppVal = parseFloat(topPInput?.value);
+  const histVal = parseInt(historyNInput?.value);
+  const maxtVal = parseInt(maxTokensInput?.value);
+  const thinkVal = parseInt(thinkingBudgetInput?.value);
   if (!isNaN(tempVal)) payload.temperature = tempVal;
   if (!isNaN(toppVal)) payload.top_p = toppVal;
   if (!isNaN(histVal)) payload.history_n = histVal;
@@ -5698,8 +5710,14 @@ function applyStreamDelta(ev){
   const key = streamDrafts.get(mapKey) || streamDraftKey(streamId, kind);
   const existing = messageByKey.get(key);
   if (ev.done){
-    if (existing) removeMessage(key, { render:true, cache:false });
-    streamDrafts.delete(mapKey);
+    if (existing) {
+      const finalText = ev.final_text || existing.text || "";
+      const finalMeta = { ...existing.meta };
+      delete finalMeta.streaming;
+      if (ev.api && typeof ev.api === "object") finalMeta.api = ev.api;
+      setMessage({ ...existing, text: finalText, meta: finalMeta, status: "sent" }, { render: true, cache: true });
+      streamDrafts.delete(mapKey);
+    }
     return;
   }
 
