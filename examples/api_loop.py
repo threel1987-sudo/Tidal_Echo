@@ -816,9 +816,12 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
             else:
                 base_messages = messages[:]
                 tool_calls_collected: list[dict[str, Any]] = []
+                first_thinking = None
                 try:
-                    for _ in range(8):
+                    for round_idx in range(8):
                         out = await complete_chat(route, messages, native_tools)
+                        if round_idx == 0 and out.get("thinking"):
+                            first_thinking = out["thinking"]
                         msg = out.get("message") or {}
                         calls = msg.get("tool_calls") or []
                         if not calls and isinstance(msg.get("function_call"), dict):
@@ -842,6 +845,8 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         out = {"text": "", "usage": {}}
                     if tool_calls_collected:
                         out["tool_calls"] = tool_calls_collected
+                    if first_thinking and not out.get("thinking"):
+                        out["thinking"] = first_thinking
                 except HTTPException as exc:
                     if exc.status_code == 400 and native_tools and not FORCE_NATIVE_TOOLS:
                         _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
@@ -880,6 +885,8 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         "usage": out.get("usage") or {},
         "session": session_id,
     }
+    import logging
+    logging.info(f"[api_loop] model={out.get('model')}, has_thinking={bool(out.get('thinking'))}, has_tool_calls={bool(out.get('tool_calls'))}")
     if out.get("thinking"):
         meta["thinking"] = out["thinking"]
     if out.get("tool_calls"):
