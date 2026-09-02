@@ -5904,6 +5904,7 @@ inputEl.addEventListener("input", () => {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
   sendBtn.classList.remove("hidden");
   micBtn.classList.add("hidden");
+  if (nearBottom()) scrollToBottom();
 });
 inputEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !composing){
