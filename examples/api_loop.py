@@ -819,6 +819,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     for _ in range(8):
                         out = await complete_chat(route, messages, native_tools)
                         msg = out.get("message") or {}
+                        print(f"[DEBUG RAW RESPONSE] {json.dumps(msg, ensure_ascii=False)}")
                         calls = msg.get("tool_calls") or []
                         if not calls and isinstance(msg.get("function_call"), dict):
                             calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
