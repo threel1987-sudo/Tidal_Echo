@@ -483,15 +483,18 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
                 if chunk:
                     text_parts.append(chunk)
                     await sink(chunk)
-                if delta.get("type") == "thinking":
+                if delta.get("thinking"):
                     thinking_blocks.append({"content": delta.get("thinking") or ""})
-                if delta.get("type") == "tool_use":
-                    tool_calls.append({
-                        "name": delta.get("name") or "",
-                        "input": delta.get("input") or {}
-                    })
+                if delta.get("tool_calls"):
+                    for tc in delta.get("tool_calls", []):
+                        tool_calls.append({
+                            "name": tc.get("function", {}).get("name") or tc.get("name") or "",
+                            "input": json.loads(tc.get("function", {}).get("arguments") or "{}") if tc.get("function") else (tc.get("input") or {})
+                        })
+    final_text = "".join(text_parts).strip()
+    print(f"[DEBUG stream_chat] final_text={final_text[:100]}, usage={usage}, thinking={len(thinking_blocks)}, tool_calls={len(tool_calls)}")
     return {
-        "text": "".join(text_parts).strip(),
+        "text": final_text,
         "usage": usage,
         "thinking": thinking_blocks if thinking_blocks else None,
         "tool_calls": tool_calls if tool_calls else None
@@ -625,14 +628,30 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     data = resp.json()
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
     thinking = []
-    if isinstance(msg.get("content"), list):
-        for block in msg["content"]:
+    content = msg.get("content")
+    if isinstance(content, list):
+        for block in content:
             if isinstance(block, dict) and block.get("type") == "thinking":
-                thinking.append({"content": block.get("thinking") or ""})
+                thinking.append({"content": block.get("thinking") or block.get("text") or ""})
+    elif isinstance(content, str) and msg.get("thinking"):
+        thinking.append({"content": msg.get("thinking") or ""})
     tool_calls_raw = msg.get("tool_calls") or []
-    tool_calls = [{"name": tc.get("function", {}).get("name") or "", "input": tc.get("function", {}).get("arguments") or {}} for tc in tool_calls_raw if isinstance(tc, dict)]
+    tool_calls = []
+    for tc in tool_calls_raw:
+        if not isinstance(tc, dict):
+            continue
+        func = tc.get("function", {})
+        name = func.get("name") or ""
+        args_str = func.get("arguments") or "{}"
+        try:
+            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+        except json.JSONDecodeError:
+            args = {}
+        tool_calls.append({"name": name, "input": args})
+    final_text = (msg.get("content") or "").strip() if isinstance(msg.get("content"), str) else ""
+    print(f"[DEBUG complete_chat] final_text={final_text[:100]}, thinking={len(thinking)}, tool_calls={len(tool_calls)}")
     return {
-        "text": (msg.get("content") or "").strip(),
+        "text": (msg.get("content") or "").strip() if isinstance(msg.get("content"), str) else "",
         "message": msg,
         "usage": data.get("usage") or {},
         "thinking": thinking if thinking else None,
@@ -813,6 +832,7 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         meta["thinking"] = out["thinking"]
     if out.get("tool_calls"):
         meta["tool_calls"] = out["tool_calls"]
+    print(f"[DEBUG handle_ingest] meta keys: {list(meta.keys())}, thinking={bool(out.get('thinking'))}, tool_calls={bool(out.get('tool_calls'))}")
     if dry:
         return {"ok": True, "reply": reply, "api": meta}
     if STREAM_OUTPUT:
