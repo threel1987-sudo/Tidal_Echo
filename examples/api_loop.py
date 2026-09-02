@@ -809,6 +809,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     out = await complete_chat(route, messages)
             else:
                 base_messages = messages[:]
+                tool_calls_collected: list[dict[str, Any]] = []
                 try:
                     for _ in range(8):
                         out = await complete_chat(route, messages, native_tools)
@@ -821,15 +822,20 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         messages.append(msg)
                         for call in calls:
                             fn = call.get("function") or {}
+                            tool_name = str(fn.get("name") or "")
                             try:
                                 args = json.loads(fn.get("arguments") or "{}")
-                                result = await execute_mcp_tool(str(fn.get("name") or ""), args)
+                                result = await execute_mcp_tool(tool_name, args)
                                 content = json.dumps(result, ensure_ascii=False)
+                                tool_calls_collected.append({"name": tool_name, "input": args, "result": result})
                             except Exception as exc:
                                 content = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                                tool_calls_collected.append({"name": tool_name, "input": args, "result": {"error": str(exc)}})
                             messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
                     else:
                         out = {"text": "", "usage": {}}
+                    if tool_calls_collected:
+                        out["tool_calls"] = tool_calls_collected
                 except HTTPException as exc:
                     if exc.status_code == 400 and native_tools:
                         _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
