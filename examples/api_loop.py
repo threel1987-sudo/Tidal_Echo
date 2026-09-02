@@ -810,7 +810,8 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                 except HTTPException as exc:
                     if exc.status_code not in FALLBACK_CODES:
                         raise
-                    out = await complete_chat(route, messages)
+                    print(f"[DEBUG run_model] stream failed with {exc.status_code}, fallback to complete_chat with tools")
+                    out = await complete_chat(route, messages, native_tools)
             else:
                 base_messages = messages[:]
                 tool_calls_collected: list[dict[str, Any]] = []
