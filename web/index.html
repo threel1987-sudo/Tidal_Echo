@@ -5328,17 +5328,17 @@ function makeInlineToolCalls(toolCalls, msgKey){
   const itemsHtml = toolCalls.map(tc => {
     const name = tc.name || "unknown";
     const input = typeof tc.input === "string" ? tc.input : JSON.stringify(tc.input || {}, null, 2);
-    const result = tc.result ? (typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result, null, 2)) : "";
+    const result = tc.result ? (typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result, null, 2)) : "等待执行结果...";
     return `<div class="inline-tool-item">
       <div class="inline-tool-name">🔧 ${escapeHtml(name)}</div>
       <div class="inline-tool-section">
         <div class="inline-tool-label">参数</div>
         <pre>${escapeHtml(input)}</pre>
       </div>
-      ${result ? `<div class="inline-tool-section">
+      <div class="inline-tool-section">
         <div class="inline-tool-label">结果</div>
         <pre>${escapeHtml(result)}</pre>
-      </div>` : ""}
+      </div>
     </div>`;
   }).join("");
   div.innerHTML = `

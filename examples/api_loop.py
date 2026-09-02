@@ -833,10 +833,10 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                                 args = json.loads(fn.get("arguments") or "{}")
                                 result = await execute_mcp_tool(tool_name, args)
                                 content = json.dumps(result, ensure_ascii=False)
-                                tool_calls_collected.append({"name": tool_name, "input": args, "result": result})
+                                tool_calls_collected.append({"name": tool_name, "input": args, "result": result, "status": "success"})
                             except Exception as exc:
                                 content = json.dumps({"error": str(exc)}, ensure_ascii=False)
-                                tool_calls_collected.append({"name": tool_name, "input": args, "result": {"error": str(exc)}})
+                                tool_calls_collected.append({"name": tool_name, "input": args, "result": {"error": str(exc)}, "status": "error"})
                             messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
                     else:
                         out = {"text": "", "usage": {}}
