@@ -5377,6 +5377,7 @@ function makeMessage(rowData){
   bubble.innerHTML = _inner;
   if (atts.length){ bubble.classList.add("has-att"); if (!m.text) bubble.classList.add("att-only"); }
   
+  // Insert thinking & tool_calls BEFORE the bubble (so they appear above)
   if (m.from === "ai" && m.meta && m.meta.api){
     console.log("[DEBUG] AI message meta.api:", JSON.stringify(m.meta.api, null, 2));
     if (m.meta.api.thinking && m.meta.api.thinking.length > 0){
