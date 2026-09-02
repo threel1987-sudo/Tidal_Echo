@@ -647,6 +647,11 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     usage: dict[str, Any] = {}
     raw_msg: dict[str, Any] = {}
 
+    body_keys = [k for k in body if k not in ("messages",)]
+    body_summary = {k: (body[k] if k != "tools" else f"[{len(body[k])} tools]") for k in body_keys}
+    print(f"[api_loop:complete_chat] request body keys: {body_summary}")
+
+    finish_reason_val = None
     async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
         async with client.stream(
             "POST",
@@ -676,7 +681,10 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
                     continue
                 if isinstance(ev.get("usage"), dict):
                     usage = ev["usage"]
-                delta = (((ev.get("choices") or [{}])[0]).get("delta") or {})
+                choice0 = (ev.get("choices") or [{}])[0]
+                if choice0.get("finish_reason"):
+                    finish_reason_val = choice0["finish_reason"]
+                delta = (choice0.get("delta") or {})
                 if delta.get("role"):
                     raw_msg["role"] = delta["role"]
                 chunk = delta.get("content") or ""
@@ -729,7 +737,7 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     raw_msg["content"] = final_text
     if raw_tool_calls:
         raw_msg["tool_calls"] = raw_tool_calls
-    print(f"[api_loop:complete_chat] has_reasoning_content={bool(thinking_blocks)}, has_tool_calls={bool(tool_calls_parsed)}, text_len={len(final_text)}")
+    print(f"[api_loop:complete_chat] has_reasoning_content={bool(thinking_blocks)}, has_tool_calls={bool(tool_calls_parsed)}, text_len={len(final_text)}, finish_reason={finish_reason_val}")
     return {
         "text": final_text,
         "message": raw_msg,
