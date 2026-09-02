@@ -60,6 +60,7 @@ MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
 TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
 STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
+FORCE_NATIVE_TOOLS = os.environ.get("FORCE_NATIVE_TOOLS", "0").lower() in {"1", "true", "yes"}
 
 _TOOLS_UNSUPPORTED_ROUTES: set[tuple[str, str]] = set()
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
@@ -790,9 +791,9 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
         try:
             all_tools = await mcp_tools()
             route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
-            use_prompt_tools = route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)
+            use_prompt_tools = (route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)) if not FORCE_NATIVE_TOOLS else False
             native_tools = [] if use_prompt_tools else all_tools
-            print(f"[DEBUG run_model] route={route.get('model')}, use_prompt_tools={use_prompt_tools}, native_tools_count={len(native_tools)}, in_unsupported={route_key in _TOOLS_UNSUPPORTED_ROUTES}")
+            print(f"[DEBUG run_model] route={route.get('model')}, use_prompt_tools={use_prompt_tools}, native_tools_count={len(native_tools)}, in_unsupported={route_key in _TOOLS_UNSUPPORTED_ROUTES}, force_native={FORCE_NATIVE_TOOLS}")
             if use_prompt_tools:
                 out = await _prompt_tool_loop(route, messages, all_tools)
             elif emit_stream and STREAM_OUTPUT and not native_tools:
