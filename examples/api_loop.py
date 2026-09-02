@@ -498,26 +498,33 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
                 elif ev.get("thinking"):
                     thinking_blocks.append({"content": ev.get("thinking") or ""})
                 
-                # OpenAI tool_calls format
+                # OpenAI tool_calls format (streamed: name/arguments arrive in chunks)
                 if delta.get("tool_calls"):
                     for tc in delta.get("tool_calls", []):
-                        tool_calls.append({
-                            "name": tc.get("function", {}).get("name") or tc.get("name") or "",
-                            "input": json.loads(tc.get("function", {}).get("arguments") or "{}") if tc.get("function") else (tc.get("input") or {})
-                        })
+                        idx = tc.get("index", 0)
+                        func = tc.get("function") or {}
+                        while len(tool_calls) <= idx:
+                            tool_calls.append({"name": "", "arguments_buf": ""})
+                        if func.get("name"):
+                            tool_calls[idx]["name"] = func["name"]
+                        if func.get("arguments"):
+                            tool_calls[idx]["arguments_buf"] += func["arguments"]
                 # Anthropic tool_use format
                 elif delta.get("type") == "tool_use":
-                    tool_calls.append({
-                        "name": delta.get("name") or "",
-                        "input": delta.get("input") or {}
-                    })
+                    tool_calls.append({"name": delta.get("name") or "", "arguments_buf": json.dumps(delta.get("input") or {})})
+    final_tool_calls = []
+    for tc in tool_calls:
+        try:
+            args = json.loads(tc.get("arguments_buf") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            args = {}
+        final_tool_calls.append({"name": tc.get("name", ""), "input": args})
     final_text = "".join(text_parts).strip()
-    print(f"[DEBUG stream_chat] final_text={final_text[:100]}, usage={usage}, thinking={len(thinking_blocks)}, tool_calls={len(tool_calls)}")
     return {
         "text": final_text,
         "usage": usage,
         "thinking": thinking_blocks if thinking_blocks else None,
-        "tool_calls": tool_calls if tool_calls else None
+        "tool_calls": final_tool_calls if final_tool_calls else None
     }
 
 
@@ -646,7 +653,6 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
             err_detail = resp.text[:500] or "fallback"
         raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
     data = resp.json()
-    print(f"[DEBUG complete_chat RAW] response keys: {list(data.keys())}, message keys: {list((data.get('choices',[{}])[0].get('message',{})).keys())}")
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
     thinking = []
     content = msg.get("content")
@@ -690,7 +696,6 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
             args = {}
         tool_calls.append({"name": name, "input": args})
     final_text = (msg.get("content") or "").strip() if isinstance(msg.get("content"), str) else ""
-    print(f"[DEBUG complete_chat] final_text={final_text[:100]}, thinking={len(thinking)}, tool_calls={len(tool_calls)}")
     return {
         "text": final_text,
         "message": msg,
@@ -751,9 +756,7 @@ async def _prompt_tool_loop(route: dict[str, Any], messages: list[dict[str, Any]
         out = await complete_chat(route, messages)
         text = out.get("text") or ""
         last_out = out
-        print(f"[DEBUG _prompt_tool_loop] round text preview: {text[:200]}")
         matches = list(_TOOL_CALL_RE.finditer(text))
-        print(f"[DEBUG _prompt_tool_loop] found {len(matches)} tool_call matches")
         if not matches:
             break
         for m in matches:
@@ -793,7 +796,6 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
             route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
             use_prompt_tools = (route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)) if not FORCE_NATIVE_TOOLS else False
             native_tools = [] if use_prompt_tools else all_tools
-            print(f"[DEBUG run_model] route={route.get('model')}, use_prompt_tools={use_prompt_tools}, native_tools_count={len(native_tools)}, in_unsupported={route_key in _TOOLS_UNSUPPORTED_ROUTES}, force_native={FORCE_NATIVE_TOOLS}")
             if use_prompt_tools:
                 out = await _prompt_tool_loop(route, messages, all_tools)
             elif emit_stream and STREAM_OUTPUT and not native_tools:
@@ -810,7 +812,6 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                 except HTTPException as exc:
                     if exc.status_code not in FALLBACK_CODES:
                         raise
-                    print(f"[DEBUG run_model] stream failed with {exc.status_code}, fallback to complete_chat with tools")
                     out = await complete_chat(route, messages, native_tools)
             else:
                 base_messages = messages[:]
@@ -819,7 +820,6 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                     for _ in range(8):
                         out = await complete_chat(route, messages, native_tools)
                         msg = out.get("message") or {}
-                        print(f"[DEBUG RAW RESPONSE] {json.dumps(msg, ensure_ascii=False)}")
                         calls = msg.get("tool_calls") or []
                         if not calls and isinstance(msg.get("function_call"), dict):
                             calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
@@ -845,7 +845,6 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                 except HTTPException as exc:
                     if exc.status_code == 400 and native_tools and not FORCE_NATIVE_TOOLS:
                         _TOOLS_UNSUPPORTED_ROUTES.add(route_key)
-                        print(f"[DEBUG] Added {route_key} to unsupported routes due to 400 error")
                         try:
                             out = await _prompt_tool_loop(route, base_messages, all_tools)
                         except Exception:
@@ -885,8 +884,6 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         meta["thinking"] = out["thinking"]
     if out.get("tool_calls"):
         meta["tool_calls"] = out["tool_calls"]
-        print(f"[DEBUG handle_ingest] tool_calls detail: {json.dumps(out['tool_calls'], ensure_ascii=False, indent=2)}")
-    print(f"[DEBUG handle_ingest] meta keys: {list(meta.keys())}, thinking={bool(out.get('thinking'))}, tool_calls={bool(out.get('tool_calls'))}")
     if dry:
         return {"ok": True, "reply": reply, "api": meta}
     if STREAM_OUTPUT:

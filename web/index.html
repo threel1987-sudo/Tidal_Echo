@@ -5379,14 +5379,11 @@ function makeMessage(rowData){
   
   // Insert thinking & tool_calls BEFORE the bubble (so they appear above)
   if (m.from === "ai" && m.meta && m.meta.api){
-    console.log("[DEBUG] AI message meta.api:", JSON.stringify(m.meta.api, null, 2));
     if (m.meta.api.thinking && m.meta.api.thinking.length > 0){
-      console.log("[DEBUG] Found thinking blocks:", m.meta.api.thinking.length);
       const thinkDiv = makeInlineThinking(m.meta.api.thinking, m._key);
       row.appendChild(thinkDiv);
     }
     if (m.meta.api.tool_calls && m.meta.api.tool_calls.length > 0){
-      console.log("[DEBUG] Found tool_calls:", m.meta.api.tool_calls.length);
       const toolDiv = makeInlineToolCalls(m.meta.api.tool_calls, m._key);
       row.appendChild(toolDiv);
     }
