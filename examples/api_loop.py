@@ -792,6 +792,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
             route_key = (route.get("url", "").rstrip("/"), route.get("model", ""))
             use_prompt_tools = route_key in _TOOLS_UNSUPPORTED_ROUTES and bool(all_tools)
             native_tools = [] if use_prompt_tools else all_tools
+            print(f"[DEBUG run_model] route={route.get('model')}, use_prompt_tools={use_prompt_tools}, native_tools_count={len(native_tools)}, in_unsupported={route_key in _TOOLS_UNSUPPORTED_ROUTES}")
             if use_prompt_tools:
                 out = await _prompt_tool_loop(route, messages, all_tools)
             elif emit_stream and STREAM_OUTPUT and not native_tools:
