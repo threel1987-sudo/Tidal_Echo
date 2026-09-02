@@ -592,11 +592,13 @@
   /* ── meta card: thinking + tool calls (Kelivo-inspired unified card above AI bubble) ── */
   .meta-card{
     width: 100%;
-    margin-bottom: 8px;
+    max-width: min(61vw, 506px);
     border-radius: 14px;
     background: var(--bubble-ai-bg);
+    box-shadow: 0 10px 28px rgba(78, 94, 108, 0.08);
     overflow: hidden;
   }
+  .row.has-meta-card{ flex-direction: column; align-items: flex-start; gap: 4px; }
   .meta-card-row{
     display: flex;
     align-items: center;
@@ -1315,6 +1317,7 @@
     .row.grouped{ margin-top: 8px; }
     .row.ai{ padding-left: 42px; }
     .bubble{ max-width: min(63vw, 520px); font-size: 13.5px; line-height: 1.56; padding: 8px 13px 8px; }
+    .meta-card{ max-width: min(63vw, 520px); }
     .meta{ font-size: 11px; margin-left: 8px; }
     .day{ font-size: 12px; }
     .new-divider{ font-size: 12px; margin: 14px 0 10px; }
@@ -5365,6 +5368,7 @@ function makeMessage(rowData){
     const hasThinking = m.meta.api.thinking && m.meta.api.thinking.length > 0;
     const hasTools = m.meta.api.tool_calls && m.meta.api.tool_calls.length > 0;
     if (hasThinking || hasTools){
+      row.classList.add("has-meta-card");
       row.appendChild(makeMetaCard(
         hasThinking ? m.meta.api.thinking : null,
         hasTools ? m.meta.api.tool_calls : null
