@@ -484,8 +484,11 @@ async def stream_chat(route: dict[str, Any], messages: list[dict[str, str]], sin
                     text_parts.append(chunk)
                     await sink(chunk)
                 
+                # DeepSeek/OpenAI reasoning_content field (KEY FIELD!)
+                if delta.get("reasoning_content"):
+                    thinking_blocks.append({"content": delta.get("reasoning_content") or ""})
                 # Anthropic thinking format (delta.type == "thinking")
-                if delta.get("type") == "thinking":
+                elif delta.get("type") == "thinking":
                     thinking_blocks.append({"content": delta.get("thinking") or delta.get("content") or ""})
                 # OpenAI extended thinking format (delta.thinking exists)
                 elif delta.get("thinking"):
@@ -646,6 +649,10 @@ async def complete_chat(route: dict[str, Any], messages: list[dict[str, Any]], t
     msg = ((data.get("choices") or [{}])[0]).get("message") or {}
     thinking = []
     content = msg.get("content")
+    
+    # DeepSeek/OpenAI reasoning_content field (KEY FIELD!)
+    if msg.get("reasoning_content"):
+        thinking.append({"content": msg.get("reasoning_content") or ""})
     
     # OpenAI extended thinking: content array with type="thinking"
     if isinstance(content, list):
