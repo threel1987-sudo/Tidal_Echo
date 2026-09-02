@@ -1115,7 +1115,7 @@
   .config-view-title{ display:grid; gap:2px; }
   .config-view-title strong{ font-size:15px; }
   .config-view-title span{ color:var(--text-soft); font-size:11px; }
-  .mcp-list{ display:grid; gap:9px; }
+  .mcp-list, .api-list{ display:grid; gap:9px; }
   .mcp-item{ display:grid; gap:0; border:1px solid var(--card-line); border-radius:12px; background:var(--field-bg); overflow:hidden; transition:box-shadow .18s; }
   .mcp-item-head{ display:flex; align-items:center; gap:8px; padding:11px 12px; cursor:pointer; user-select:none; }
   .mcp-item-head:hover{ background:rgba(128,128,128,.05); }
@@ -1145,6 +1145,17 @@
   .mcp-tool-copy{ min-width:0; flex:1; display:grid; gap:2px; }
   .mcp-tool-name{ font-size:12px; font-weight:600; color:var(--text); word-break:break-all; }
   .mcp-tool-desc{ font-size:11px; color:var(--text-soft); line-height:1.45; }
+  
+  /* ── API list items (reuse mcp-item pattern) ── */
+  .api-item{ display:grid; gap:0; border:1px solid var(--card-line); border-radius:12px; background:var(--field-bg); overflow:hidden; }
+  .api-item-head{ display:flex; align-items:center; gap:8px; padding:11px 12px; user-select:none; }
+  .api-item-meta{ flex:1 1 0; min-width:0; display:grid; gap:2px; }
+  .api-item-name{ min-width:0; overflow:hidden; font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+  .api-item-url{ overflow:hidden; color:var(--text-soft); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+  .api-item-actions{ display:flex; align-items:center; gap:5px; flex:0 0 auto; }
+  .api-item-priority{ color:var(--text-soft); font-size:10.5px; padding:2px 6px; border-radius:4px; background:var(--seg-track); border:1px solid var(--card-line); }
+  .api-item-priority.primary{ color:var(--accent); border-color:var(--accent); background:rgba(73,142,255,.08); }
+  
   .mcp-debug-section{ padding:10px 12px; border-top:1px solid var(--card-line); display:flex; flex-direction:column; gap:8px; }
   .mcp-debug-label{ font-size:11px; color:var(--text-faint); font-weight:500; letter-spacing:.03em; text-transform:uppercase; }
   .config-action.ghost{ background:transparent; color:var(--text-soft); border-color:var(--card-line); font-size:11.5px; }
@@ -2115,17 +2126,18 @@
       </section>
 
       <section class="settings-card config-view" id="apiConfigView">
-        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>AI API</strong><span>配置第三方 OpenAI 兼容接口</span></div></div>
-        <div class="config-fields" id="apiConfigFields">
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>AI API</strong><span>管理多个 OpenAI 兼容接口（自动 fallback）</span></div></div>
+        <div class="api-list" id="apiList"></div>
+        <div class="config-fields" id="apiConfigFields" style="margin-top:4px">
           <input id="apiUrlInput" type="url" placeholder="API 地址，例如 https://api.example.com/v1" autocomplete="url">
           <input id="apiKeyInput" type="password" placeholder="API Key（留空表示保持原 Key）" autocomplete="off">
           <input id="apiModelInput" type="text" placeholder="模型名称，例如 gpt-4o" autocomplete="off">
           <div class="config-field-label">自定义 Headers（可选，每行一条 key=value）</div>
           <textarea id="apiHeadersInput" class="config-textarea" rows="2" placeholder="X-Ombre-Session-Id=main" autocomplete="off" spellcheck="false"></textarea>
         </div>
-        <div class="config-actions"><button class="config-action primary" id="apiSaveBtn" type="button">保存 API 配置</button></div>
+        <div class="config-actions"><button class="config-action primary" id="apiSaveBtn" type="button">添加 API 路由</button></div>
         <div class="push-hint" id="apiConfigHint"></div>
-        <div class="config-actions" style="margin-top:4px"><button class="config-action ghost" id="apiDebugBtn" type="button">测试 Gateway 连接</button></div>
+        <div class="config-actions" style="margin-top:4px"><button class="config-action ghost" id="apiDebugBtn" type="button">测试连接</button></div>
         <pre class="debug-output" id="apiDebugOutput" style="display:none"></pre>
       </section>
 
@@ -2450,7 +2462,7 @@ const terminalBtn = $("#terminalBtn"), terminalPanel = $("#terminalPanel"), term
 const brainSeg = $("#brainSeg"), brainHint = $("#brainHint");
 const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiHeadersInput = $("#apiHeadersInput"), apiSaveBtn = $("#apiSaveBtn"), apiDebugBtn = $("#apiDebugBtn"), apiDebugOutput = $("#apiDebugOutput"), apiConfigHint = $("#apiConfigHint");
 const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpDebugBtn = $("#mcpDebugBtn"), mcpToolCallBtn = $("#mcpToolCallBtn"), mcpDebugOutput = $("#mcpDebugOutput"), mcpConfigHint = $("#mcpConfigHint");
-const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), mcpList = $("#mcpList");
+const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), apiList = $("#apiList"), mcpList = $("#mcpList");
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
 const personaConfigView = $("#personaConfigView"), modelParamsConfigView = $("#modelParamsConfigView");
 let editingMcpIndex = null;
@@ -3387,12 +3399,79 @@ function resetMcpForm(){
   if (mcpSaveBtn) mcpSaveBtn.textContent = "添加 MCP 服务";
 }
 function updateConfigEntryStatus(){
-  const route = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
+  const routes = savedLoopConfig && Array.isArray(savedLoopConfig.main_chain) ? savedLoopConfig.main_chain : [];
   const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers : [];
-  if (apiEntryStatus) apiEntryStatus.textContent = route.url && route.model ? `${route.model} · ${route.url}` : "配置模型连接";
+  if (apiEntryStatus) {
+    if (routes.length === 0) {
+      apiEntryStatus.textContent = "配置模型连接";
+    } else if (routes.length === 1) {
+      apiEntryStatus.textContent = `${routes[0].model || "API"} · ${routes[0].url}`;
+    } else {
+      apiEntryStatus.textContent = `${routes.length} 个 API · 主用 ${routes[0].model || routes[0].url}`;
+    }
+  }
   if (mcpEntryStatus) mcpEntryStatus.textContent = servers.length ? `${servers.length} 个服务 · ${servers.filter(s => s.enabled !== false).length} 个启用` : "管理工具服务";
 }
 const MCP_TOOLS_CACHE = {};
+let editingApiIndex = null;
+function renderApiList(){
+  if (!apiList) return;
+  const routes = savedLoopConfig && Array.isArray(savedLoopConfig.main_chain) ? savedLoopConfig.main_chain : [];
+  apiList.textContent = "";
+  routes.forEach((route, position) => {
+    const item = document.createElement("div");
+    item.className = "api-item";
+    
+    const head = document.createElement("div");
+    head.className = "api-item-head";
+    
+    const meta = document.createElement("div");
+    meta.className = "api-item-meta";
+    const name = document.createElement("strong");
+    name.className = "api-item-name";
+    name.textContent = route.model || `route-${position + 1}`;
+    const urlEl = document.createElement("div");
+    urlEl.className = "api-item-url";
+    urlEl.textContent = route.url || "";
+    meta.append(name, urlEl);
+    
+    const priority = document.createElement("span");
+    priority.className = `api-item-priority ${position === 0 ? "primary" : ""}`;
+    priority.textContent = position === 0 ? "主用" : `备用 ${position}`;
+    
+    const actions = document.createElement("div");
+    actions.className = "api-item-actions";
+    
+    const edit = document.createElement("button");
+    edit.className = "mcp-icon-btn";
+    edit.type = "button";
+    edit.title = "编辑";
+    edit.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+    edit.dataset.apiAction = "edit";
+    edit.dataset.apiPosition = position;
+    
+    const remove = document.createElement("button");
+    remove.className = "mcp-icon-btn danger";
+    remove.type = "button";
+    remove.title = "删除";
+    remove.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4.5 3v6M7.5 3v6M3 3l.5 7h5L9 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    remove.dataset.apiAction = "delete";
+    remove.dataset.apiPosition = position;
+    
+    actions.append(edit, remove);
+    head.append(meta, priority, actions);
+    item.appendChild(head);
+    apiList.appendChild(item);
+  });
+}
+function resetApiForm(){
+  editingApiIndex = null;
+  if (apiUrlInput) apiUrlInput.value = "";
+  if (apiKeyInput) apiKeyInput.value = "";
+  if (apiModelInput) apiModelInput.value = "";
+  if (apiHeadersInput) apiHeadersInput.value = "";
+  if (apiSaveBtn) apiSaveBtn.textContent = "添加 API 路由";
+}
 function renderMcpList(){
   if (!mcpList) return;
   const servers = savedLoopConfig && Array.isArray(savedLoopConfig.mcp_servers) ? savedLoopConfig.mcp_servers : [];
@@ -3568,6 +3647,7 @@ async function loadLoopConfig(){
     if (apiConfigHint) apiConfigHint.textContent = route.key_masked ? `已配置 Key：${route.key_masked}` : "尚未配置 API";
     if (mcpConfigHint) mcpConfigHint.textContent = "MCP Token 仅在输入时更新，留空保持原 Token";
     resetMcpForm();
+    renderApiList();
     renderMcpList();
     updateConfigEntryStatus();
   }catch(_){
@@ -3585,6 +3665,7 @@ async function saveLoopConfig(payload, hint){
     }
     savedLoopConfig = await r.json();
     if (hint) hint.textContent = "已保存，API 已启用";
+    renderApiList();
     renderMcpList();
     updateConfigEntryStatus();
     loadLoopConfig();
@@ -3650,8 +3731,16 @@ $("#modelParamsSaveBtn")?.addEventListener("click", async () => {
 });
 document.querySelectorAll("[data-config-back]").forEach(button => button.addEventListener("click", () => setConfigView("hub")));
 if (apiSaveBtn) apiSaveBtn.addEventListener("click", async () => {
-  const old = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
-  const entry = { index:0, url:apiUrlInput.value.trim(), key:apiKeyInput.value, model:apiModelInput.value.trim() || old.model };
+  const url = apiUrlInput.value.trim();
+  if (!url) { if (apiConfigHint) apiConfigHint.textContent = "请输入 API 地址"; return; }
+  const current = savedLoopConfig && Array.isArray(savedLoopConfig.main_chain) ? savedLoopConfig.main_chain.slice() : [];
+  const old = editingApiIndex !== null && current[editingApiIndex] ? current[editingApiIndex] : {};
+  const entry = {
+    index: editingApiIndex !== null ? editingApiIndex : current.length,
+    url,
+    key: apiKeyInput.value || old.key || "",
+    model: apiModelInput.value.trim() || old.model || ""
+  };
   const raw = (apiHeadersInput ? apiHeadersInput.value.trim() : "");
   const h = {};
   if (raw) {
@@ -3663,8 +3752,41 @@ if (apiSaveBtn) apiSaveBtn.addEventListener("click", async () => {
     }
   }
   entry.headers = h;
-  const saved = await saveLoopConfig({ main_chain:[entry] }, apiConfigHint);
-  if (saved) await saveBrain("loop");
+  const position = editingApiIndex !== null ? current.findIndex(r => r.index === editingApiIndex) : -1;
+  if (position >= 0) current[position] = entry; else current.push(entry);
+  const saved = await saveLoopConfig({ main_chain: current.map((r, i) => ({ ...r, index: i, key: i === (position >= 0 ? position : current.length - 1) ? entry.key : "" })) }, apiConfigHint);
+  if (saved) {
+    resetApiForm();
+    renderApiList();
+    if (current.length === 1) await saveBrain("loop");
+  }
+});
+if (apiList) apiList.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-api-action]");
+  if (!btn) return;
+  const action = btn.dataset.apiAction;
+  const position = parseInt(btn.dataset.apiPosition);
+  const current = savedLoopConfig && Array.isArray(savedLoopConfig.main_chain) ? savedLoopConfig.main_chain.slice() : [];
+  const route = current[position];
+  if (!route) return;
+  if (action === "edit") {
+    editingApiIndex = route.index;
+    if (apiUrlInput) apiUrlInput.value = route.url || "";
+    if (apiKeyInput) apiKeyInput.value = "";
+    if (apiModelInput) apiModelInput.value = route.model || "";
+    if (apiHeadersInput) {
+      const h = route.headers || {};
+      apiHeadersInput.value = Object.keys(h).map(k => `${k}=${h[k]}`).join("\n");
+    }
+    if (apiSaveBtn) apiSaveBtn.textContent = "保存修改";
+    if (apiConfigFields) apiConfigFields.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } else if (action === "delete") {
+    if (!confirm(`确定删除 ${route.model || route.url} 吗？`)) return;
+    current.splice(position, 1);
+    await saveLoopConfig({ main_chain: current.map((r, i) => ({ ...r, index: i })) }, apiConfigHint);
+    renderApiList();
+    if (current.length === 0) await saveBrain("desktop");
+  }
 });
 if (apiDebugBtn) apiDebugBtn.addEventListener("click", async () => {
   const route = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
