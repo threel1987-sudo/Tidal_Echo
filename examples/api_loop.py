@@ -58,8 +58,7 @@ PERSONA = os.environ.get("PERSONA", "").strip()
 HISTORY_N = int(os.environ.get("HISTORY_N", "24"))
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
 TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
-STREAM_OUTPUT = False  # TEMP: force non-stream to test thinking capture
-# STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
+STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 
 _TOOLS_UNSUPPORTED_ROUTES: set[tuple[str, str]] = set()
