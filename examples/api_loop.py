@@ -652,15 +652,43 @@ def build_messages(text: str, *, before_id: int | None = None, session_id: str =
 
 
 # ── 公开配置接口(读/写 loop_config) ────────────────────────────────────────
+HOME_STATE_MCP_URL = os.environ.get("HOME_STATE_MCP_URL", "http://127.0.0.1:3025")
+_AUTO_MCP = {"checked": 0.0, "reachable": False}
+
+
+def _home_mcp_reachable() -> bool:
+    """探测同机 home_state_mcp(冰箱门/猫/备忘/记忆墙等小屋工具)。60 秒内复用结论。"""
+    import urllib.request
+    now = time.time()
+    if now - _AUTO_MCP["checked"] < 60:
+        return _AUTO_MCP["reachable"]
+    _AUTO_MCP["checked"] = now
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本机探测,不走代理
+        with opener.open(HOME_STATE_MCP_URL + "/", timeout=2) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        _AUTO_MCP["reachable"] = bool(data.get("ok")) and data.get("service") == "home_state_mcp"
+    except Exception:
+        _AUTO_MCP["reachable"] = False
+    return _AUTO_MCP["reachable"]
+
+
 def mcp_servers() -> list[dict[str, Any]]:
     rows = load_config().get("mcp_servers")
-    if not isinstance(rows, list):
-        return []
-    return [
-        {"name": str(r.get("name") or "server"), "url": str(r.get("url") or "").rstrip("/"),
-         "token": str(r.get("token") or ""), "enabled": bool(r.get("enabled", True))}
-        for r in rows if isinstance(r, dict) and r.get("url")
-    ]
+    cleaned = (
+        [
+            {"name": str(r.get("name") or "server"), "url": str(r.get("url") or "").rstrip("/"),
+             "token": str(r.get("token") or ""), "enabled": bool(r.get("enabled", True))}
+            for r in rows if isinstance(r, dict) and r.get("url")
+        ]
+        if isinstance(rows, list)
+        else []
+    )
+    # 零配置兜底:同机的 home_state_mcp 活着、且列表里没有同地址的服务时,自动挂上
+    # (工具名前缀 mcp_home_*:冰箱门/猫/备忘/记忆墙)。用户手动关掉或加了自己的服务后不再重复注入。
+    if _home_mcp_reachable() and not any(r["url"] == HOME_STATE_MCP_URL for r in cleaned):
+        cleaned.append({"name": "home", "url": HOME_STATE_MCP_URL, "token": "", "enabled": True})
+    return cleaned
 
 
 def public_config() -> dict[str, Any]:
