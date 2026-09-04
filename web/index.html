@@ -3125,6 +3125,7 @@ if (menuPanel){
     if (!item) return;
     if (item.dataset.menu === "chat") closeMenu();       // back to chat
     else if (item.dataset.menu === "album") location.assign("album.html");  // album shell (wire your own backend)
+    else if (item.dataset.menu === "room"){ closeMenu(); openProfile(); setConfigView("room"); loadRoomConfig().finally(() => setTimeout(() => { const sc = document.querySelector("#profilePanel .profile-scroll"); if (sc && roomConfigView){ const y = roomConfigView.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop; sc.scrollTop = Math.max(0, y - 10); } }, 80)); }  // 主菜单 → 房间设置（加载完定位到房间卡片）
     else showToast("即将开放");                           // placeholder items
   });
 }
