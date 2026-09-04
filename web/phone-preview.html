@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iPhone 17 Pro 预览 · Tidal Echo</title>
+<style>
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:32px 16px 48px; min-height:100vh;
+    background:radial-gradient(1200px 700px at 50% -10%, #3a4a63 0%, #232c3a 45%, #171c26 100%);
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+  }
+  .device{
+    width:418px; padding:10px 8px 12px; border-radius:60px;
+    background:linear-gradient(160deg,#3b3f47,#14161a 70%);
+    box-shadow:0 30px 80px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.22),
+               inset 0 0 0 3px #0a0c0f;
+    position:relative;
+  }
+  .side{ position:absolute; background:#0a0c0f; border-radius:4px; }
+  .btn-l{ left:-3px; top:130px; width:3px; height:60px; }
+  .btn-r{ right:-3px; top:130px; width:3px; height:60px; }
+  .btn-r2{ right:-3px; top:200px; width:3px; height:94px; }
+  .screen{
+    width:402px; height:874px; overflow:hidden; border-radius:52px;
+    background:#fff; position:relative;
+  }
+  .screen iframe{ width:402px; height:874px; border:0; display:block; }
+  .island{
+    position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    width:120px; height:34px; border-radius:20px; background:#060709; z-index:9;
+  }
+  .cap{ color:#9aa7ba; font-size:13px; letter-spacing:.04em; }
+  .cap b{ color:#e8edf5; font-weight:600; }
+  .note{ color:#7d8aa0; font-size:12px; max-width:440px; text-align:center; line-height:1.7; }
+</style>
+</head>
+<body>
+  <div class="cap">Tidal Echo · <b>iPhone 17 Pro</b> 真机比例预览 <b>402 × 874</b></div>
+  <div class="device">
+    <span class="side btn-l"></span><span class="side btn-r"></span><span class="side btn-r2"></span>
+    <div class="screen">
+      <iframe src="./index.html" title="Tidal Echo · iPhone 17 Pro 预览"></iframe>
+      <div class="island"></div>
+    </div>
+  </div>
+  <div class="note">这个框里的排版 = 你手机上打开的样子(宽度 402 CSS px,和你手机完全一致)。<br>唯一区别:真机顶部刘海会再多约 59px 的安全区留白,内容列数、卡片、间距都一致。</div>
+</body>
+</html>
