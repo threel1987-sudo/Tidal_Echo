@@ -2655,6 +2655,7 @@
           <div class="config-field-label" id="roomSectionLabel">房间描述（在家时，告诉他你在哪个房间、周围有什么） <i class="info-i" title="每个房间一行：名字 + 环境描述。切换房间在聊天页顶部的小胶囊里点一下就行。这里只负责描写空间，不写人格指令。">i</i></div>
           <div class="room-rows" id="roomList"></div>
           <button class="config-action ghost" id="addRoomBtn" type="button">＋ 添加房间</button>
+          <button class="config-action ghost" id="homeTemplateBtn" type="button">填入「我们的家」默认布局</button>
           <div class="push-hint" id="roomNoteHint">这里只写空间和环境；人格始终由「AI 人设」统一决定，不随房间变化。</div>
         </div>
         <div class="config-actions"><button class="config-action primary" id="roomSaveBtn" type="button">保存空间设置</button></div>
@@ -2945,7 +2946,7 @@ const injectConfigView = $("#injectConfigView"), openInjectConfigBtn = $("#openI
 const proactiveConfigView = $("#proactiveConfigView"), openProactiveConfigBtn = $("#openProactiveConfigBtn"), proactiveEnabledInput = $("#proactiveEnabledInput"), proactiveIdleInput = $("#proactiveIdleInput"), proactiveCooldownInput = $("#proactiveCooldownInput"), proactiveMaxDayInput = $("#proactiveMaxDayInput"), proactiveQuietEnabledInput = $("#proactiveQuietEnabledInput"), proactiveQuietStartInput = $("#proactiveQuietStartInput"), proactiveQuietEndInput = $("#proactiveQuietEndInput"), proactiveTzSelect = $("#proactiveTzSelect"), proactiveSaveBtn = $("#proactiveSaveBtn"), proactiveConfigHint = $("#proactiveConfigHint"), proactiveEntryStatus = $("#proactiveEntryStatus");
 const dataConfigView = $("#dataConfigView"), openDataConfigBtn = $("#openDataConfigBtn"), dataEntryStatus = $("#dataEntryStatus");
 const roomConfigView = $("#roomConfigView"), openRoomConfigBtn = $("#openRoomConfigBtn"), roomEntryStatus = $("#roomEntryStatus");
-const scenarioSeg = $("#scenarioSeg"), roomList = $("#roomList"), addRoomBtn = $("#addRoomBtn"), roomSaveBtn = $("#roomSaveBtn"), roomConfigHint = $("#roomConfigHint");
+const scenarioSeg = $("#scenarioSeg"), roomList = $("#roomList"), addRoomBtn = $("#addRoomBtn"), homeTemplateBtn = $("#homeTemplateBtn"), roomSaveBtn = $("#roomSaveBtn"), roomConfigHint = $("#roomConfigHint");
 const presenceCapsule = $("#presenceCapsule"), presenceOverlay = $("#presenceOverlay"), presenceScrim = $("#presenceScrim"), presenceCloseBtn = $("#presenceCloseBtn"), presenceScenarios = $("#presenceScenarios"), presenceRoomsWrap = $("#presenceRoomsWrap"), presenceRoomChips = $("#presenceRoomChips"), presenceManageBtn = $("#presenceManageBtn");
 const exportScopeSeg = $("#exportScopeSeg"), exportFormatSeg = $("#exportFormatSeg"), exportChatBtn = $("#exportChatBtn"), exportHint = $("#exportHint");
 const clearSessionList = $("#clearSessionList"), clearSessionHint = $("#clearSessionHint"), clearCacheBtn = $("#clearCacheBtn"), clearCacheHint = $("#clearCacheHint");
@@ -4633,6 +4634,18 @@ const SCENARIO_META = {
   together_out: { emoji: "🚶", full: "一起出门", capsule: "🚶 一起出门" },
 };
 function presenceMeta(id){ return SCENARIO_META[id] || SCENARIO_META.together_at_home; }
+/* 「我们的家」默认布局：按家里的真实结构写好，点一下填入，再自己润色。
+   只写空间与陈设，不写人格。 */
+const HOME_ROOMS = {
+  "玄关": "进门是一小段玄关，右手边靠墙一列鞋柜，钥匙、包、换下来的鞋都收在这里；往里走几步，左侧就是客厅。",
+  "客厅": "客厅开阔明亮，不摆书架：一张大大的软沙发，脚下一块软软的长毛地毯，沙发正前方一张小玻璃茶几，放得下两杯热饮；客厅右侧推门出去是阳台，左侧连着开放式厨房。",
+  "阳台": "客厅右侧的阳台，能吹到外面的风、晒到太阳，站在这里可以看看天，晾晾衣服。",
+  "厨房": "开放式厨房和客厅连成一片，做饭时一抬头就能看见客厅里的人；旁边一张刚好坐下两个人的小餐桌，吃饭时面对面。",
+  "卧室": "从客厅和厨房之间的通道往里走就是卧室。一张大大的双人床摆在房间正中间，床头靠墙，床的两侧各有一个床头柜，床边铺着柔软的地毯，光脚踩上去很舒服。床的左侧是飘窗台，床脚靠近飘窗台的地方放着一张单人沙发；床右侧的墙边是化妆桌。",
+  "衣帽间": "化妆桌旁有一道推拉门，拉开进去是衣帽间：一面大大的全身镜，旁边整排挂着你俩的衣服，角落一条矮凳，矮凳下铺着地毯；换衣服、照镜子、坐着发一会儿呆都可以。",
+  "卫生间": "卧室出去对门就是卫生间。进门左手边是洗手台，洗手台下面的柜子里收着卫生用品；再往里走是一个大大的浴缸，浴缸嵌在一整面落地玻璃前，泡澡时可以看见外面的光。",
+  "书房": "沿着浴室外的通道再往里走是书房。这里有一整面书架，一边放着阿克的书，一边放着漫画；另有一个柜子专门摆满了鬼灭的手办。书房中间铺着一块地毯，地毯上是一张双人沙发，两个人可以靠在一起看书。",
+};
 function presenceCapsuleText(p){
   if (!p) return SCENARIO_META.together_at_home.capsule;
   const meta = presenceMeta(p.scenario);
@@ -4776,6 +4789,17 @@ addRoomBtn?.addEventListener("click", () => {
   roomList.appendChild(el);
   const t = el.querySelector(".inject-entry-title");
   if (t) t.focus();
+});
+homeTemplateBtn?.addEventListener("click", () => {
+  if (!roomList) return;
+  const filled = [...roomList.querySelectorAll(".inject-entry")].filter(box =>
+    (box.querySelector(".inject-entry-title")?.value || "").trim() ||
+    (box.querySelector("textarea")?.value || "").trim()
+  );
+  if (filled.length && !confirm("会用「我们的家」默认布局替换列表里的房间描述，继续吗？")) return;
+  renderRoomRows(HOME_ROOMS);
+  if (scenarioSeg) scenarioSeg.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.value === "together_at_home"));
+  if (roomConfigHint) roomConfigHint.textContent = "已填入我们的家。检查一下吧，觉得哪里不对可以直接改，再点保存。";
 });
 roomSaveBtn?.addEventListener("click", async () => {
   const hint = roomConfigHint;

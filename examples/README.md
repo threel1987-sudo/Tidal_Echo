@@ -6,6 +6,7 @@
 |---|---|---|
 | [`bridge_any_llm.py`](bridge_any_llm.py) | 把任意 OpenAI 兼容模型(GPT/DeepSeek/Gemini/GLM/Kimi/通义/本地…)接成 AI 侧 | 任意 |
 | [`api_loop.py`](api_loop.py) | 服务器常驻 API 身体；配合 PWA 的 Desktop/API 开关、多窗口和流式输出 | Linux/VPS |
+| [`home_state_mcp.py`](home_state_mcp.py) | 小屋动态状态 MCP 插件:猫的行踪、备忘、记忆墙(猫默认关闭) | 任意 |
 | [`companion-api-loop.service`](companion-api-loop.service) | `api_loop.py` 的 systemd 模板 | Linux/VPS |
 | [`.env.example`](.env.example) | `bridge_any_llm.py` / `api_loop.py` 共用配置模板 | — |
 | [`confirm_dev_channel_win.py`](confirm_dev_channel_win.py) | Windows 上自动确认 Claude Code 的 DevChannelsDialog 弹框 | Windows |
@@ -81,6 +82,28 @@ python confirm_dev_channel_win.py -- claude --dangerously-load-development-chann
 ```
 
 细节(为什么躲不掉、覆盖范围)见 [`AGENTS.md` §4](../AGENTS.md)。
+
+---
+
+## 小屋动态状态插件(home_state_mcp.py)
+
+给「家」记动态状态的 MCP 服务器:猫咪的行踪与心情、冰箱/卫生用品的备忘、记忆墙。
+零第三方依赖,状态落在脚本旁的 `home_state.json`。**猫咪默认关闭** —— 配合「和阿克
+一起出门买猫、再把它带回家」的过程:猫还没回家时,猫工具只会温柔地提示「家里还没有猫」,
+不写任何状态,不影响聊天。
+
+```bash
+cd examples
+python3 home_state_mcp.py          # 监听 127.0.0.1:3025,可选 HOME_STATE_PORT / HOME_STATE_FILE
+curl -s http://127.0.0.1:3025      # 健康检查:{ok: true, cat_enabled: false, ...}
+```
+
+接进 AI 大脑:在 PWA 设置「连接与工具」的 MCP 服务器里加一行
+`url = http://127.0.0.1:3025`,`name` 建议 `home`(工具名会变成 `mcp_home_home_state_get` 等)。
+
+**猫什么时候开**:等那天真的把猫接回家了,把 `home_state.json` 里 `cat_enabled` 改成
+`true`(或重启时加 `--enable-cat`),然后跟他说「猫咪进门了,给家里登记一下」,他就会调用
+`home_state_adopt_cat` 记下名字、毛色和性格,之后随时用 `home_state_set_cat` 更新它在哪、在干嘛。
 
 ---
 
