@@ -1120,6 +1120,61 @@
   }
   .profile-scroll::-webkit-scrollbar{ width:0; height:0; }
 
+  /* ── Room page (独立房间设置 · 干净面板) ── */
+  .room-panel{
+    position: fixed;
+    inset: 0;
+    z-index: 205;
+    pointer-events: none;
+    transform: translateX(100%);
+    opacity: 0;
+    transition: transform .34s var(--ease-soft), opacity .26s ease;
+  }
+  .room-panel.open{ transform: none; opacity: 1; pointer-events: auto; }
+  .room-page{
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg);
+    background-image: var(--wall-default);
+    background-size: cover;
+    background-position: center;
+    overflow: hidden;
+  }
+  .room-page::before{
+    content:""; position:absolute; inset:0; background: var(--scrim); pointer-events:none;
+  }
+  .room-topbar{
+    position: relative; z-index:1;
+    flex: 0 0 auto;
+    display:flex; align-items:center; gap:10px;
+    height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) var(--side-pad) 0;
+  }
+  .room-topbar h2{
+    margin:0; font-size:17px; font-weight:650; letter-spacing:.02em; color:var(--text);
+  }
+  .room-back{
+    width:40px; height:40px; flex:none;
+    border:0; border-radius:50%; padding:0; margin-left:-6px;
+    background: transparent; color: var(--text);
+    display:grid; place-items:center; cursor:pointer;
+    transition: transform .15s ease;
+  }
+  .room-back:active{ transform: scale(.9); }
+  .room-back svg{ width:24px; height:24px; display:block; }
+  .room-scroll{
+    position: relative; z-index:1;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 10px var(--side-pad) calc(30px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:24px;
+  }
+  .room-scroll::-webkit-scrollbar{ width:0; height:0; }
+
   /* identity */
   .profile-identity{
     display:grid;
@@ -2481,10 +2536,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.3-1.2L3 20l1.2-5.2A8.5 8.5 0 1 1 21 11.5z"/><path d="M7.8 11.5h7.4M11.5 7.8v7.4"/></svg>
             <span class="config-entry-copy"><strong>主动消息</strong><span id="proactiveEntryStatus">按上下文自然发起聊天</span></span>
           </button>
-          <button class="config-entry" id="openRoomConfigBtn" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
-            <span class="config-entry-copy"><strong>空间与房间</strong><span id="roomEntryStatus">场景切换 · 房间描述</span></span>
-          </button>
           <button class="config-entry" id="openDataConfigBtn" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
             <span class="config-entry-copy"><strong>数据管理</strong><span id="dataEntryStatus">导出记录 · 清空窗口 · 清缓存</span></span>
@@ -2644,26 +2695,6 @@
         <div class="push-hint" id="proactiveConfigHint"></div>
       </section>
 
-      <!-- ── 空间与房间 ── -->
-      <section class="settings-card config-view" id="roomConfigView">
-        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>空间与房间</strong><span>只写空间和环境，不改变人格</span></div></div>
-        <div class="config-fields">
-          <div class="config-field-label">当前场景 <i class="info-i" title="决定他此刻的说话方式。在家：两个人在场，可以写肢体互动和家具；我出门了：你俩隔着手机聊天，他回复短消息风格；一起出门：描写外面环境。人格不受影响。">i</i></div>
-          <div class="segmented" id="scenarioSeg" role="group" aria-label="场景切换">
-            <button type="button" value="together_at_home">🏠 在家（一起）</button>
-            <button type="button" value="away">📱 我出门了</button>
-            <button type="button" value="together_out">🚶 一起出门</button>
-          </div>
-          <div class="config-field-label" id="roomSectionLabel">房间描述（在家时，告诉他你在哪个房间、周围有什么） <i class="info-i" title="每个房间一行：名字 + 环境描述。切换房间在聊天页顶部的小胶囊里点一下就行。这里只负责描写空间，不写人格指令。">i</i></div>
-          <div class="room-rows" id="roomList"></div>
-          <button class="config-action ghost" id="addRoomBtn" type="button">＋ 添加房间</button>
-          <button class="config-action ghost" id="homeTemplateBtn" type="button">填入「我们的家」默认布局</button>
-          <div class="push-hint" id="roomNoteHint">这里只写空间和环境；人格始终由「AI 人设」统一决定，不随房间变化。</div>
-        </div>
-        <div class="config-actions"><button class="config-action primary" id="roomSaveBtn" type="button">保存空间设置</button></div>
-        <div class="push-hint" id="roomConfigHint"></div>
-      </section>
-
       <!-- ── 数据管理 ── -->
       <section class="settings-card config-view" id="dataConfigView">
         <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>数据管理</strong><span>导出记录 · 清空窗口 · 清除本机缓存</span></div></div>
@@ -2694,6 +2725,37 @@
 
     </div>
     <input type="file" id="avatarInput" accept="image/*" class="hidden">
+  </div>
+</div>
+
+<!-- ── Room page (独立房间设置 · 只有空间，没有任何个人信息/主题/头像) ── -->
+<div class="room-panel hidden" id="roomPanel" role="dialog" aria-modal="true" aria-label="空间与房间">
+  <div class="room-page">
+    <div class="room-topbar">
+      <button class="room-back" id="roomClose" type="button" aria-label="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="roomTitle">空间与房间</h2>
+    </div>
+    <div class="room-scroll">
+      <section class="settings-card" id="roomConfigView">
+        <div class="config-fields">
+          <div class="config-field-label">当前场景 <i class="info-i" title="决定他此刻的说话方式。在家：两个人在场，可以写肢体互动和家具；我出门了：你俩隔着手机聊天，他回复短消息风格；一起出门：描写外面环境。人格不受影响。">i</i></div>
+          <div class="segmented" id="scenarioSeg" role="group" aria-label="场景切换">
+            <button type="button" value="together_at_home">🏠 在家（一起）</button>
+            <button type="button" value="away">📱 我出门了</button>
+            <button type="button" value="together_out">🚶 一起出门</button>
+          </div>
+          <div class="config-field-label" id="roomSectionLabel">房间描述（在家时，告诉他你在哪个房间、周围有什么） <i class="info-i" title="每个房间一行：名字 + 环境描述。切换房间在聊天页顶部的小胶囊里点一下就行。这里只负责描写空间，不写人格指令。">i</i></div>
+          <div class="room-rows" id="roomList"></div>
+          <button class="config-action ghost" id="addRoomBtn" type="button">＋ 添加房间</button>
+          <button class="config-action ghost" id="homeTemplateBtn" type="button">填入「我们的家」默认布局</button>
+          <div class="push-hint" id="roomNoteHint">这里只写空间和环境；人格始终由「AI 人设」统一决定，不随房间变化。</div>
+        </div>
+        <div class="config-actions"><button class="config-action primary" id="roomSaveBtn" type="button">保存空间设置</button></div>
+        <div class="push-hint" id="roomConfigHint"></div>
+      </section>
+    </div>
   </div>
 </div>
 
@@ -2947,7 +3009,7 @@ const temperatureInput = $("#temperatureInput"), topPInput = $("#topPInput"), hi
 const injectConfigView = $("#injectConfigView"), openInjectConfigBtn = $("#openInjectConfigBtn"), injectEnabledInput = $("#injectEnabledInput"), injectEntriesList = $("#injectEntriesList"), injectAddBtn = $("#injectAddBtn"), injectSaveBtn = $("#injectSaveBtn"), injectConfigHint = $("#injectConfigHint"), injectEntryStatus = $("#injectEntryStatus");
 const proactiveConfigView = $("#proactiveConfigView"), openProactiveConfigBtn = $("#openProactiveConfigBtn"), proactiveEnabledInput = $("#proactiveEnabledInput"), proactiveIdleInput = $("#proactiveIdleInput"), proactiveCooldownInput = $("#proactiveCooldownInput"), proactiveMaxDayInput = $("#proactiveMaxDayInput"), proactiveQuietEnabledInput = $("#proactiveQuietEnabledInput"), proactiveQuietStartInput = $("#proactiveQuietStartInput"), proactiveQuietEndInput = $("#proactiveQuietEndInput"), proactiveTzSelect = $("#proactiveTzSelect"), proactiveSaveBtn = $("#proactiveSaveBtn"), proactiveConfigHint = $("#proactiveConfigHint"), proactiveEntryStatus = $("#proactiveEntryStatus");
 const dataConfigView = $("#dataConfigView"), openDataConfigBtn = $("#openDataConfigBtn"), dataEntryStatus = $("#dataEntryStatus");
-const roomConfigView = $("#roomConfigView"), openRoomConfigBtn = $("#openRoomConfigBtn"), roomEntryStatus = $("#roomEntryStatus");
+const roomPanel = $("#roomPanel"), roomCloseBtn = $("#roomClose");
 const scenarioSeg = $("#scenarioSeg"), roomList = $("#roomList"), addRoomBtn = $("#addRoomBtn"), homeTemplateBtn = $("#homeTemplateBtn"), roomSaveBtn = $("#roomSaveBtn"), roomConfigHint = $("#roomConfigHint");
 const presenceCapsule = $("#presenceCapsule"), presenceOverlay = $("#presenceOverlay"), presenceScrim = $("#presenceScrim"), presenceCloseBtn = $("#presenceCloseBtn"), presenceScenarios = $("#presenceScenarios"), presenceRoomsWrap = $("#presenceRoomsWrap"), presenceRoomChips = $("#presenceRoomChips"), presenceManageBtn = $("#presenceManageBtn");
 const exportScopeSeg = $("#exportScopeSeg"), exportFormatSeg = $("#exportFormatSeg"), exportChatBtn = $("#exportChatBtn"), exportHint = $("#exportHint");
@@ -3071,6 +3133,25 @@ function closeProfile(){
   profileCloseTimer = setTimeout(() => profilePanel.classList.add("hidden"), 360);
 }
 
+/* ── Room page (独立房间设置) ── */
+let roomCloseTimer = null;
+function openRoomPanel(){
+  if (!roomPanel) return;
+  clearTimeout(roomCloseTimer);
+  roomPanel.classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => roomPanel.classList.add("open")));
+}
+function closeRoomPanel(){
+  if (!roomPanel) return;
+  roomPanel.classList.remove("open");
+  clearTimeout(roomCloseTimer);
+  roomCloseTimer = setTimeout(() => roomPanel.classList.add("hidden"), 360);
+}
+if (roomCloseBtn) roomCloseBtn.addEventListener("click", closeRoomPanel);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && roomPanel && !roomPanel.classList.contains("hidden")) closeRoomPanel();
+});
+
 try{ localStorage.removeItem("companion_bg"); }catch(e){}
 applyIdentity();
 applyWall(currentWall());
@@ -3125,7 +3206,7 @@ if (menuPanel){
     if (!item) return;
     if (item.dataset.menu === "chat") closeMenu();       // back to chat
     else if (item.dataset.menu === "album") location.assign("album.html");  // album shell (wire your own backend)
-    else if (item.dataset.menu === "room"){ closeMenu(); openProfile(); setConfigView("room"); loadRoomConfig().finally(() => setTimeout(() => { const sc = document.querySelector("#profilePanel .profile-scroll"); if (sc && roomConfigView){ const y = roomConfigView.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop; sc.scrollTop = Math.max(0, y - 10); } }, 80)); }  // 主菜单 → 房间设置（加载完定位到房间卡片）
+    else if (item.dataset.menu === "room"){ closeMenu(); openRoomPanel(); loadRoomConfig(); }  // 主菜单 → 独立的房间设置页（干净：无头像/主题）
     else showToast("即将开放");                           // placeholder items
   });
 }
@@ -4054,7 +4135,6 @@ function setConfigView(view){
   if (modelParamsConfigView) modelParamsConfigView.classList.toggle("active", view === "model-params");
   if (injectConfigView) injectConfigView.classList.toggle("active", view === "inject");
   if (proactiveConfigView) proactiveConfigView.classList.toggle("active", view === "proactive");
-  if (roomConfigView) roomConfigView.classList.toggle("active", view === "room");
   if (dataConfigView) dataConfigView.classList.toggle("active", view === "data");
 }
 function resetMcpForm(){
@@ -4081,12 +4161,6 @@ function updateConfigEntryStatus(){
   if (proactiveEntryStatus) {
     const p = savedLoopConfig && savedLoopConfig.proactive;
     proactiveEntryStatus.textContent = p && p.enabled ? `已开启 · 今日已发 ${p.sent_today ?? 0} 条` : "按上下文自然发起聊天";
-  }
-  if (roomEntryStatus) {
-    const p = savedLoopConfig && savedLoopConfig.presence;
-    const meta = p ? presenceMeta(p.scenario) : null;
-    const room = p && p.room ? ` · ${p.room}` : "";
-    roomEntryStatus.textContent = meta ? `${meta.full}${room}` : "场景切换 · 房间描述";
   }
 }
 const MCP_TOOLS_CACHE = {};
@@ -4729,7 +4803,7 @@ async function savePresence(patch, hint){
       rooms: savedLoopConfig.rooms || {},
     };
     applyPresenceFromConfig(next);
-    savedLoopConfig.presence = next.presence;   // roomEntryStatus / 后续读取用
+    savedLoopConfig.presence = next.presence;   // 与本地 UI 保持同步 / 后续读取用
   }
   const ok = await saveLoopConfig(patch, hint);
   if (!ok && !USE_MOCK) loadLoopConfig().catch(() => {});
@@ -4767,11 +4841,9 @@ presenceScrim?.addEventListener("click", closePresence);
 presenceCloseBtn?.addEventListener("click", closePresence);
 presenceManageBtn?.addEventListener("click", () => {
   closePresence();
-  openProfile();
-  setConfigView("room");
+  openRoomPanel();
   loadRoomConfig();
 });
-openRoomConfigBtn?.addEventListener("click", () => { setConfigView("room"); loadRoomConfig(); });
 if (presenceScenarios){
   presenceScenarios.addEventListener("click", e => {
     const slot = e.target.closest(".presence-slot");
