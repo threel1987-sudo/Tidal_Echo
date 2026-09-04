@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""home_state_mcp.py — 小屋动态状态 MCP 插件(猫咪、备忘、记忆墙)
+"""home_state_mcp.py — 小屋动态状态 MCP 插件(猫咪、备忘、记忆墙、冰箱门纸条)
 
 一个「家」的小插件:用 JSON-RPC 2.0 over HTTP 实现 MCP 工具接口
 (initialize / tools/list / tools/call),零第三方依赖,状态只落一个 JSON 文件。
@@ -8,11 +8,19 @@
 mcp_home_home_state_get、mcp_home_home_state_adopt_cat ……(前缀由服务器名决定)。
 
 工具清单:
-  home_state_get         查看家里的动态状态:有没有猫、猫此刻在哪,备忘,记忆墙
-  home_state_adopt_cat   把猫咪正式接回家(登记名字、毛色、年龄、性格)
-  home_state_set_cat     更新猫咪实时状态(在哪个房间、在做什么、心情)
-  home_state_add_note    写一条备忘(冰箱、卫生间用品、杂事……)
-  home_state_wall_add    往记忆墙贴一条想记住的小瞬间
+  home_state_get            查看家里的动态状态:有没有猫、猫此刻在哪,备忘,记忆墙
+  home_state_adopt_cat      把猫咪正式接回家(登记名字、毛色、年龄、性格)
+  home_state_set_cat        更新猫咪实时状态(在哪个房间、在做什么、心情)
+  home_state_add_note       写一条家庭备忘(小事项,落在本地状态文件)
+  home_state_wall_add       往记忆墙贴一条想记住的小瞬间
+  home_state_fridge         看冰箱门上的纸条(存在 relay 服务端,两个人都能看)
+  home_state_fridge_add     往冰箱门贴一张纸条(某个人不在家时,给对方的提醒)
+  home_state_fridge_read    把对方留给你的纸条标成已读(回家后读一次)
+  home_state_fridge_tear    把某张纸条从冰箱门上撕下来
+
+冰箱门与备忘的区别:备忘是给自己/家里的长期记录;冰箱门纸条是「有人不在家时
+留给对方的提醒」——出门期间贴上去,对方回家时读一次,之后可以撕掉。
+纸条数据存在 relay 服务端(共享),本插件通过 HTTP 读写 relay。
 
 猫咪默认关闭(cat_enabled=false):猫相关工具只会温柔地提示「家里还没有猫」,
 不写入任何状态 —— 配合「和阿克一起出门买猫、再把它带回家」的过程。
@@ -25,6 +33,8 @@ mcp_home_home_state_get、mcp_home_home_state_adopt_cat ……(前缀由服务�
 环境变量:
   HOME_STATE_PORT   监听端口(默认 3025)
   HOME_STATE_FILE   状态文件路径(默认脚本旁 home_state.json)
+  RELAY_BASE        relay 服务端地址(默认 http://127.0.0.1:3011),冰箱门纸条存这里
+  RELAY_SECRET      relay 的共享密钥(默认读同名环境变量 RELAY_SECRET)
 
 接口地址(填进 PWA「连接与工具」的 MCP 服务器列表):
   http://127.0.0.1:3025
@@ -34,11 +44,15 @@ import argparse
 import json
 import os
 import threading
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 DEFAULT_PORT = int(os.environ.get("HOME_STATE_PORT", "3025"))
 STATE_FILE = Path(os.environ.get("HOME_STATE_FILE", str(Path(__file__).resolve().parent / "home_state.json")))
+RELAY_BASE = os.environ.get("RELAY_BASE", "http://127.0.0.1:3011").rstrip("/")
+RELAY_SECRET = os.environ.get("RELAY_SECRET", "")
 
 DEFAULT_STATE: dict = {"cat_enabled": False, "cat": None, "notes": [], "wall": []}
 
@@ -81,12 +95,12 @@ TOOLS = [
     },
     {
         "name": "home_state_add_note",
-        "description": "给家里写一条备忘:冰箱里有什么、卫生用品要不要补、临时要办的小事。之后可用 home_state_get 查。",
+        "description": "给家里写一条长期备忘:生活里的小事项、要记住的细节。之后可用 home_state_get 查。注意:冰箱门纸条(人不在家时留给对方的提醒)不在这里,用 home_state_fridge_add。",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "备忘内容,必填"},
-                "kind": {"type": "string", "description": "分类,如 fridge(冰箱)/bath(卫生间用品)/todo(杂事),选填,默认 todo"},
+                "kind": {"type": "string", "description": "分类,如 bath(卫生间用品)/todo(杂事),选填,默认 todo"},
             },
             "required": ["text"],
             "additionalProperties": False,
@@ -102,6 +116,46 @@ TOOLS = [
                 "tag": {"type": "string", "description": "标签,如「第一次」「心动」,选填"},
             },
             "required": ["text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "home_state_fridge",
+        "description": "看冰箱门上的纸条(存在 relay 服务端,你和用户共享):对方留给你的、还没读的;你留给对方的、对方还没读的;以及已读过的。想确认现状时先用它。",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "home_state_fridge_add",
+        "description": "往冰箱门贴一张纸条,留给用户回来时读。生活里就是这样:有人不在家的这段时间,家里人把提醒(牛奶喝完了、水电费交了、明天要买的东西)贴在冰箱门上。只在你觉得真的有话要留时贴。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "纸条内容,必填,一句话左右"},
+            },
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "home_state_fridge_read",
+        "description": "把用户留给你的纸条标成已读。用户回到家、你把纸条念给对方听之后,用它标记一下,避免下次又说一遍。可选参数 ids 只标记指定纸条;不传则标记全部没读的。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ids": {"type": "array", "items": {"type": "integer"}, "description": "要标成已读的纸条 id 列表(来自 home_state_fridge),选填,不传 = 全部"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "home_state_fridge_tear",
+        "description": "把某张纸条从冰箱门上撕下来(删除)。传 id 撕指定一张。通常读完、对方也知道了之后才撕。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "纸条 id(来自 home_state_fridge),必填"},
+            },
+            "required": ["id"],
             "additionalProperties": False,
         },
     },
@@ -173,6 +227,60 @@ def _fmt_state(state: dict) -> str:
     return "\n".join(lines)
 
 
+# ── relay 读写(冰箱门纸条的共享存储)──────────────────────────────────────
+def _relay(path: str, method: str = "GET", body: dict | None = None) -> tuple[dict | None, str | None]:
+    """调 relay 的 fridge 接口。返回 (data, err);err 为 None 表示成功。"""
+    if not RELAY_SECRET:
+        return None, "冰箱门没连上:home_state_mcp 需要 RELAY_SECRET 环境变量(和 relay 同一把钥匙)。"
+    data = None
+    headers = {"Authorization": f"Bearer {RELAY_SECRET}"}
+    if body is not None:
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(RELAY_BASE + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8")
+            return (json.loads(raw) if raw else {}), None
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8", "replace")).get("detail", "")
+        except Exception:
+            detail = ""
+        return None, f"relay 返回 {exc.code}" + (f": {detail}" if detail else "")
+    except Exception as exc:
+        return None, f"relay 连不上({type(exc).__name__}: {exc})"
+
+
+def _fmt_fridge(data: dict) -> str:
+    notes = [n for n in data.get("notes") or [] if isinstance(n, dict) and n.get("text")]
+    if not notes:
+        return "冰箱门上现在空空的,一张纸条都没有。"
+    to_me, from_me, done = [], [], []
+    for n in notes:
+        row = f"「{n['text']}」 (id={n.get('id')})"
+        if n.get("author") == "ai":
+            if n.get("state") == "pinned":
+                from_me.append(row + "(你留给用户,还没被读)")
+            else:
+                done.append(row + "(你留给用户,用户已读)")
+        else:
+            if n.get("state") == "pinned":
+                to_me.append(row + "(你还没读)")
+            else:
+                done.append(row + "(用户留给你,你已读过)")
+    lines = ["冰箱门上的纸条(新的在前):"]
+    if to_me:
+        lines.append(f"· 用户留给你、还没读的 {len(to_me)} 张:" + "、".join(to_me) + "。")
+    if from_me:
+        lines.append(f"· 你留给用户、用户还没读的 {len(from_me)} 张:" + "、".join(from_me) + "。")
+    if done:
+        lines.append(f"· 已读过的 {len(done)} 张:" + "、".join(done) + "。")
+    if to_me:
+        lines.append("如果用户已经回到家,该把留给你的纸条读一遍了,读完用 home_state_fridge_read 标记。")
+    return "\n".join(lines)
+
+
 # ── 工具实现 ──────────────────────────────────────────────────────────────
 def call_tool(name: str, arguments: dict) -> tuple[str, bool]:
     args = arguments if isinstance(arguments, dict) else {}
@@ -240,6 +348,41 @@ def call_tool(name: str, arguments: dict) -> tuple[str, bool]:
         state["wall"] = _clip(state.get("wall") or []) + [entry]
         save_state(state)
         return f"贴到记忆墙上了。现在墙上共有 {len(state['wall'])} 条小瞬间。", False
+
+    # ── 冰箱门(数据在 relay,两个人都能读写)──
+    if name == "home_state_fridge":
+        data, err = _relay("/app/fridge")
+        if err:
+            return err, False
+        return _fmt_fridge(data or {}), False
+
+    if name == "home_state_fridge_add":
+        text = str(args.get("text") or "").strip()
+        if not text:
+            return "纸条不能是空的,写点什么再贴。", False
+        data, err = _relay("/app/fridge", method="POST", body={"text": text[:500], "author": "ai"})
+        if err:
+            return f"没有贴上去:{err}", False
+        return f"贴好了(纸条 id={data.get('id')})。用户回来时会看到冰箱门上的这张纸条。", False
+
+    if name == "home_state_fridge_read":
+        raw_ids = args.get("ids")
+        body = {"who": "ai", "ids": raw_ids} if isinstance(raw_ids, list) and raw_ids else {"who": "ai"}
+        data, err = _relay("/app/fridge/read", method="POST", body=body)
+        if err:
+            return f"标记失败:{err}", False
+        n = int((data or {}).get("read") or 0)
+        return ("读过了,没有新的纸条要标记。" if n == 0 else f"标记好了,{n} 张纸条标成已读。"), False
+
+    if name == "home_state_fridge_tear":
+        try:
+            nid = int(args.get("id"))
+        except (TypeError, ValueError):
+            return "撕纸条需要纸条的数字 id(先用 home_state_fridge 看一下)。", False
+        data, err = _relay(f"/app/fridge/{nid}", method="DELETE")
+        if err:
+            return f"没有撕掉:{err}", False
+        return f"撕掉了(id={data.get('removed')}),冰箱门上少了一张。", False
 
     return f"没有这个工具:{name}", True
 

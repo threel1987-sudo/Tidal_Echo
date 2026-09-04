@@ -125,6 +125,19 @@ def init_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS fridge_notes (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts      TEXT NOT NULL,
+                author  TEXT NOT NULL,          -- 'human' | 'ai' (who stuck the note)
+                text    TEXT NOT NULL,
+                state   TEXT NOT NULL DEFAULT 'pinned',  -- pinned (recipient hasn't read) | read
+                read_at TEXT,
+                meta    TEXT NOT NULL DEFAULT '{}'
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS push_subscriptions (
                 endpoint TEXT PRIMARY KEY,
                 p256dh   TEXT NOT NULL,
@@ -223,6 +236,43 @@ def rows_to_messages(rows) -> list:
         }
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# fridge notes — sticky notes on the fridge door, shared by both sides.
+# A note is born when someone is away ("pinned"); the recipient reads it once
+# after they come home ("read"), and either side may tear it off (delete).
+# ---------------------------------------------------------------------------
+
+FRIDGE_MAX_NOTES = 200
+
+
+def fridge_snapshot() -> dict:
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM fridge_notes ORDER BY id DESC LIMIT ?", (FRIDGE_MAX_NOTES,)
+        ).fetchall()
+    notes = [
+        {
+            "id": r["id"], "ts": r["ts"], "author": r["author"], "text": r["text"],
+            "state": r["state"], "read_at": r["read_at"],
+            "meta": json.loads(r["meta"] or "{}"),
+        }
+        for r in rows
+    ]
+    unread = {
+        "for_human": sum(1 for n in notes if n["state"] == "pinned" and n["author"] == "ai"),
+        "for_ai": sum(1 for n in notes if n["state"] == "pinned" and n["author"] == "human"),
+    }
+    return {"notes": notes, "unread": unread}
+
+
+def fridge_event(event: str) -> dict:
+    """Shaped for the PWA's fridge page to re-render live (type 'fridge')."""
+    payload = dict(fridge_snapshot())
+    payload["type"] = "fridge"
+    payload["event"] = event
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -912,6 +962,89 @@ async def app_history(request: Request, since: int = 0, limit: int = 200, sessio
     check_auth(request)
     rows = history_for_session(session_id, since, min(limit, 500)) if session_id else history(since, min(limit, 500))
     return {"messages": [app_payload(m) for m in rows]}
+
+
+# ---- fridge notes (sticky notes on the fridge door) -------------------------
+
+@app.get("/app/fridge")
+async def fridge_get(request: Request):
+    """All notes on the door (newest first) + unread counts for each side."""
+    check_auth(request)
+    return fridge_snapshot()
+
+
+@app.post("/app/fridge")
+async def fridge_add(request: Request):
+    """Stick a note on the door. author defaults to 'human'; the AI side posts 'ai'."""
+    check_auth(request)
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty text")
+    author = str(body.get("author") or "human").strip()
+    if author not in ("human", "ai"):
+        author = "human"
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO fridge_notes (ts, author, text, state, read_at, meta) VALUES (?,?,?,?,?,?)",
+            (now_iso(), author, text[:500], "pinned", None, "{}"),
+        )
+        conn.commit()
+        nid = cur.lastrowid
+    await broadcast(app_subs, fridge_event("add"))
+    return {"id": nid, "ok": True}
+
+
+@app.post("/app/fridge/read")
+async def fridge_read(request: Request):
+    """Mark notes as read (homecoming "read once"). With ids → those notes;
+    without → every pinned note authored by the *other* side of the body's who."""
+    check_auth(request)
+    body = await request.json()
+    raw_ids = body.get("ids") if isinstance(body, dict) else None
+    with db() as conn:
+        if isinstance(raw_ids, list) and raw_ids:
+            ids = []
+            for raw in raw_ids:
+                try:
+                    n = int(raw)
+                    if n > 0:
+                        ids.append(n)
+                except (TypeError, ValueError):
+                    pass
+            if not ids:
+                raise HTTPException(status_code=400, detail="ids required")
+            cur = conn.execute(
+                "UPDATE fridge_notes SET state='read', read_at=? WHERE state='pinned' AND id IN (%s)"
+                % ",".join("?" * len(ids)),
+                [now_iso(), *ids],
+            )
+        else:
+            who = str(body.get("who") or "human").strip()
+            if who not in ("human", "ai"):
+                who = "human"
+            other = "ai" if who == "human" else "human"
+            cur = conn.execute(
+                "UPDATE fridge_notes SET state='read', read_at=? WHERE state='pinned' AND author=?",
+                (now_iso(), other),
+            )
+        conn.commit()
+        read = cur.rowcount
+    await broadcast(app_subs, fridge_event("read"))
+    return {"read": read, "ok": True}
+
+
+@app.delete("/app/fridge/{note_id}")
+async def fridge_tear(note_id: int, request: Request):
+    """Tear a note off the door."""
+    check_auth(request)
+    with db() as conn:
+        cur = conn.execute("DELETE FROM fridge_notes WHERE id = ?", (note_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="note not found")
+    await broadcast(app_subs, fridge_event("tear"))
+    return {"removed": note_id, "ok": True}
 
 
 @app.get("/app/stream")

@@ -111,7 +111,7 @@ const CACHE = "companion-v1";   // ← 每次改前端都要 bump（v1 → v2 �
 
 - 菜单页：Movie / Memory / Tides / Room
 - 设置页：模型选择 / effort / 上下文阈值 / reset / swap / status（显示示例数字）
-- **相册** `album.html`：完整的相册 UI 空壳，文件头注明了要自己实现的 `/relay/app/album/*` 端点；没接后端时显示密钥门 / 空态。
+- **冰箱门** `fridge.html`：冰箱门便利贴页面，纸条数据接 `/relay/app/fridge*` 端点（增 / 查 / 已读 / 删），与 AI 侧的 home_state MCP fridge 工具共享同一份数据；两个人都在家时不能贴新纸条。
 
 核心聊天（文字 / 图片 / 语音 / 通话 / 戳一戳 / 推送）是真接后端的。
 

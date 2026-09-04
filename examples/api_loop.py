@@ -410,12 +410,21 @@ def spatial_block() -> str:
     if scenario == "away":
         spatial = "【空间】现在用户出门在外,你一个人留在家里,两人通过手机文字聊天。"
         narrative = "【叙事】这是隔着屏幕的远距聊天:回复像发消息一样简短轻快,不描写牵手、靠近等此刻无法实现的肢体互动。"
-        return f"{spatial}\n{narrative}\n{guard}"
+        fridge = (
+            "【冰箱门】用户出门的这段时间,冰箱门上可以留纸条——生活里就是这样:留在家里的人把提醒贴在冰箱门上,"
+            "等出门的人回来读。要是你冒出该提醒他的想法(比如「牛奶喝完了」「记得拿快递」),"
+            "用 home_state_fridge_add 工具贴一张(只在他真的回来时会用上时贴,别刷屏)。"
+        )
+        return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
 
     if scenario == "together_out":
         spatial = "【空间】现在你和用户一起出门在外。"
         narrative = "【叙事】你们正在外面:可以描写周围环境、天气与并肩同行的互动,但不描写家里才有的家具陈设。"
-        return f"{spatial}\n{narrative}\n{guard}"
+        fridge = (
+            "【冰箱门】家里没人,冰箱门在家等你们:有话想留给对方、等一起回到家再读,"
+            "可以用 home_state_fridge_add 工具贴一张。"
+        )
+        return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
 
     # together_at_home
     if room and room_desc:
@@ -425,7 +434,12 @@ def spatial_block() -> str:
     else:
         spatial = "【空间】现在你和用户一起待在家里。"
     narrative = "【叙事】你们真实共处一室:可以自然描写肢体动作、距离、触碰以及房间里的家具物品,动作与对话融为一体。"
-    return f"{spatial}\n{narrative}\n{guard}"
+    fridge = (
+        "【冰箱门】都到家了:如果冰箱门上有之前谁留的纸条,此刻正是读一次的时候——"
+        "先查一下冰箱门(可用 home_state_fridge 工具),有用户留给你的就念给他听,读完用 home_state_fridge_read 标记,"
+        "不要下一轮又当新纸条再念一遍;你留的纸条他打开冰箱门自己会看到。"
+    )
+    return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
 
 def temperature() -> float:
     try:

@@ -2790,10 +2790,10 @@
           <span class="menu-copy"><span class="menu-name">Movie</span><span class="menu-sub">Fragments of light.</span></span>
           <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
         </button>
-        <button class="menu-item" type="button" data-menu="album">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.4"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-4.6-4.6L7 21"/></svg></span>
+        <button class="menu-item" type="button" data-menu="fridge">
+          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="3" width="15.6" height="18" rx="2"/><path d="M8.8 3v1.2M15.2 3v1.2M8.8 21v-1.2M15.2 21v-1.2"/><path d="M12 7.5v6M12 13.5l-1.1-1.2M12 13.5l1.1-1.2"/></svg></span>
           <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Album</span><span class="menu-sub">Collect what matters.</span></span>
+          <span class="menu-copy"><span class="menu-name">Fridge</span><span class="menu-sub">Notes on our door.</span></span>
           <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
         </button>
         <button class="menu-item" type="button" data-menu="memory">
@@ -3205,7 +3205,7 @@ if (menuPanel){
     const item = e.target.closest(".menu-item");
     if (!item) return;
     if (item.dataset.menu === "chat") closeMenu();       // back to chat
-    else if (item.dataset.menu === "album") location.assign("album.html");  // album shell (wire your own backend)
+    else if (item.dataset.menu === "fridge") location.assign("fridge.html");  // 冰箱门便利贴(数据在 relay)
     else if (item.dataset.menu === "room"){ closeMenu(); openRoomPanel(); loadRoomConfig(); }  // 主菜单 → 独立的房间设置页（干净：无头像/主题）
     else showToast("即将开放");                           // placeholder items
   });
