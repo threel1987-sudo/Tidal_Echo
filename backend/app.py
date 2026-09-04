@@ -992,6 +992,21 @@ async def fridge_add(request: Request):
         conn.commit()
         nid = cur.lastrowid
     await broadcast(app_subs, fridge_event("add"))
+    # 用户贴了新纸条 → 顺手推给 loop 大脑(阿克),不然他要到下次看冰箱门才知道。
+    if author == "human" and brain_target() == "loop":
+        try:
+            notice = {
+                "id": None,
+                "text": (
+                    f"【冰箱门】用户刚刚往冰箱门上贴了一张纸条:「{text[:200]}」。"
+                    "这是她留在家里的提醒。你可以先用 home_state_fridge 工具看一眼冰箱门确认,"
+                    "然后按你平时的语气回她一句,让她知道你看到了、记下了(自然简短,别整段复读纸条内容)。"
+                ),
+                "meta": {},
+            }
+            asyncio.create_task(forward_to_loop(notice))
+        except Exception:
+            pass
     return {"id": nid, "ok": True}
 
 

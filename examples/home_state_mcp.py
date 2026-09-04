@@ -33,7 +33,8 @@ mcp_home_home_state_get、mcp_home_home_state_adopt_cat ……(前缀由服务�
 环境变量:
   HOME_STATE_PORT   监听端口(默认 3025)
   HOME_STATE_FILE   状态文件路径(默认脚本旁 home_state.json)
-  RELAY_BASE        relay 服务端地址(默认 http://127.0.0.1:3011),冰箱门纸条存这里
+  RELAY_BASE        relay 服务端地址,冰箱门纸条存这里;不填会自动猜
+                    (优先读 RELAY_URL,再取 127.0.0.1:$PORT,最后 3011)
   RELAY_SECRET      relay 的共享密钥(默认读同名环境变量 RELAY_SECRET)
 
 接口地址(填进 PWA「连接与工具」的 MCP 服务器列表):
@@ -51,7 +52,15 @@ from pathlib import Path
 
 DEFAULT_PORT = int(os.environ.get("HOME_STATE_PORT", "3025"))
 STATE_FILE = Path(os.environ.get("HOME_STATE_FILE", str(Path(__file__).resolve().parent / "home_state.json")))
-RELAY_BASE = os.environ.get("RELAY_BASE", "http://127.0.0.1:3011").rstrip("/")
+
+# relay 地址:优先 RELAY_BASE,其次容器里常有的 RELAY_URL;
+# 都没有就取本地端口(Zeabur 等 PaaS 会用 $PORT 当 relay 端口,默认 3011)。
+_RELAY_FALLBACK_PORT = os.environ.get("PORT") or os.environ.get("RELAY_PORT") or "3011"
+RELAY_BASE = (
+    os.environ.get("RELAY_BASE")
+    or os.environ.get("RELAY_URL")
+    or f"http://127.0.0.1:{_RELAY_FALLBACK_PORT}"
+).rstrip("/")
 RELAY_SECRET = os.environ.get("RELAY_SECRET", "")
 
 DEFAULT_STATE: dict = {"cat_enabled": False, "cat": None, "notes": [], "wall": []}
