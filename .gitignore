@@ -30,3 +30,6 @@ Thumbs.db
 *.bak-*
 .idea/
 .vscode/
+
+# workspace temp uploads (screenshots / paste-in files for analysis)
+.uploads/
