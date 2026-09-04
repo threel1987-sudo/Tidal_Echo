@@ -214,6 +214,7 @@
   .topbar{
     position: sticky; top: 0; z-index: 10;
     display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;   /* 关键:键盘弹出时 iOS 会把 fixed 外壳压矮,必须禁止头部参与 flex 收缩,否则会被挤掉 40~50px */
     height: calc(var(--header-h) + env(safe-area-inset-top));
     padding: calc(env(safe-area-inset-top) + 8px) var(--side-pad) 10px;
     border-bottom: 1px solid var(--hairline);
@@ -480,6 +481,7 @@
   /* ── Messages ── */
   .scroll{
     flex: 1 1 auto;
+    min-height: 0;   /* 配合 topbar 的 flex:0 0 auto:空间紧张时收缩只落在消息区 */
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
