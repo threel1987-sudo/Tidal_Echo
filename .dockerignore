@@ -1,0 +1,8 @@
+.git
+.gitignore
+.trae-html-share-packages
+**/.env
+**/relay.db*
+**/uploads
+**/__pycache__
+**/*.pyc

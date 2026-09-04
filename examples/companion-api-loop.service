@@ -1,0 +1,15 @@
+[Unit]
+Description=Companion Channel API loop
+After=network.target companion-relay.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/companion-channel/examples
+EnvironmentFile=/root/companion-channel/examples/.env
+ExecStart=/root/companion-relay/venv/bin/python /root/companion-channel/examples/api_loop.py
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
