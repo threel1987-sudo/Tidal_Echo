@@ -581,8 +581,12 @@ def relay_rows(before_id: int | None, session_id: str, limit: int) -> list[dict[
         where.append("id < ?")
         params.append(int(before_id))
     if session_id:
-        where.append("json_extract(meta, '$.api_session') = ?")
-        params.append(session_id)
+        if session_id == "__legacy__":
+            # 与 relay 的 history_for_session 语义对齐:"__legacy__" = 未打会话标签的旧主线消息池
+            where.append("(json_extract(meta, '$.api_session') IS NULL OR json_extract(meta, '$.api_session') = '')")
+        else:
+            where.append("json_extract(meta, '$.api_session') = ?")
+            params.append(session_id)
     else:
         where.append("(json_extract(meta, '$.api_session') IS NULL OR json_extract(meta, '$.api_session') = '')")
     sql = (
@@ -2025,6 +2029,7 @@ async def loop_debug_chat(request: Request):
             "history_count": len(history),
             "history_chars": history_chars,
             "history_tokens_est": history_tokens,
+            "history_n_window": history_n(),
             "tools": {
                 "count": len(all_tools),
                 "total_chars": tools_total_chars,

@@ -5043,7 +5043,7 @@ if (apiDebugBtn) apiDebugBtn.addEventListener("click", async () => {
         const per = (brain.tools && Array.isArray(brain.tools.per_tool)) ? brain.tools.per_tool.slice().sort((a, b) => b.chars - a.chars) : [];
         return {
           分段: sec,
-          历史: `${brain.history_count} 条 / ${brain.history_chars} 字 ≈ ${brain.history_tokens_est} token`,
+          历史: `${brain.history_count} 条 / ${brain.history_chars} 字 ≈ ${brain.history_tokens_est} token（窗口上限 ${brain.history_n_window} 条）`,
           工具schema: `${brain.tools.count} 个 / ${brain.tools.total_chars} 字 ≈ ${brain.tools.total_tokens_est} token`,
           工具体积前三: per.slice(0, 3).map(t => `${t.name} (${t.chars} 字)`),
           合计估算: `≈ ${brain.total_input_tokens_est} token（${brain.total_input_chars_est} 字符，不含图片）`,
