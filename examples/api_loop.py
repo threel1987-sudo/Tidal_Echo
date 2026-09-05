@@ -1143,9 +1143,12 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
         "model": route["model"],
         "messages": messages,
         "stream": True,
-        # 流式模式下 usage 默认不下发;显式打开,最后一帧才带 token 统计
-        "stream_options": {"include_usage": True},
     }
+    # stream_options 是 OpenAI 特有扩展:纯 OpenAI 网关认,但 Anthropic 中转网关
+    # (如阿克 Gateway)的转换层不认这个字段,会直接 400 bad_response_status_code。
+    # 因此默认不发;仅当该路由显式配置 include_usage=true 时才带上(牺牲流式 usage 统计换兼容性)。
+    if route.get("include_usage"):
+        body["stream_options"] = {"include_usage": True}
     # 采样参数二选一(OpenAI 规范:temperature/top_p 不同时发,部分网关只认其一):
     # top_p 被用户调低(<1.0)才算"想用核采样",此时只发 top_p;其余情况只发 temperature。
     tp = top_p()
