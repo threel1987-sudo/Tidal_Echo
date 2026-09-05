@@ -1183,6 +1183,11 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     mt = max_tokens()
     if mt is not None:
         body["max_tokens"] = mt
+    # 「输入体积探针」:每次请求打印估算 input token(消息+工具 schema),方便与网关日志的
+    # prompt_tokens 逐条对账——差额 = 网关自身注入的内容(如人格慢变块)或 tokenizer 口径差异。
+    _est_msg = sum(est_tokens(str(m.get("content") or "")) for m in messages)
+    _est_tools = est_tokens(json.dumps(tools, ensure_ascii=False)) if tools else 0
+    print(f"[api_loop:usage] model={route.get('model')} msgs={len(messages)} tools={len(tools or [])} est_input_tokens={_est_msg + _est_tools}", flush=True)
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
