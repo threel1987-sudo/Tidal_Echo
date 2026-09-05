@@ -520,7 +520,11 @@ async function doWrite(){
 }
 
 /* ── 接线 ── */
-$("topBack").onclick=()=>{ location.assign("index.html"); };
+$("topBack").onclick=()=>{
+  // 从聊天页点进来的:history.back() 直接回到原位(bfcache 秒还原,不整页重载、不闪登录页)
+  if (document.referrer && document.referrer.indexOf(location.origin) === 0) history.back();
+  else location.assign("index.html");
+};
 $("addBtn").onclick=openWrite;
 $("readAllBtn").onclick=async()=>{ try{ await readAll(); refresh(); }catch(e){ err("标记失败:"+e.message); } };
 $("writeClose").onclick=closeWrite;

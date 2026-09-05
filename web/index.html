@@ -62,6 +62,15 @@
   })();
 </script>
 
+<script>
+  /* Auth pre-restore: if a key is already saved, mark <html authed> before first paint,
+     so a reload (e.g. returning from fridge/memory pages) goes straight into the app shell
+     instead of flashing the login screen. handle401() removes the class to re-show login. */
+  (function(){
+    try{ if (localStorage.getItem("companion_secret")) document.documentElement.classList.add("authed"); }catch(e){}
+  })();
+</script>
+
 <style>
   :root{
     --screen-height: 100vh;
@@ -1065,6 +1074,9 @@
   .login button:active{ transform: scale(.99); }
   .login .err{ color:#c0533f; font-size:13px; min-height:16px; text-align:center; margin:0; }
   .hidden{ display:none !important; }
+  /* 已登录预恢复(见 head 里的 authed 脚本):首帧直接显示主界面,不闪登录页 */
+  html.authed #login{ display:none !important; }
+  html.authed #app{ display:flex !important; }
   .app.kb .composer{ padding-bottom: 8px; }
 
   /* ── Profile page (full-screen settings) ── */
@@ -7960,6 +7972,7 @@ if (clipBtn && clipInput){
 function handle401(){
   secret = null;
   localStorage.removeItem(LS_KEY);
+  document.documentElement.classList.remove("authed");
   if (es){ try{ es.close(); }catch(e){} es = null; }
   if (healthTimer){ clearInterval(healthTimer); healthTimer = null; }
   showLogin("密钥不对,请重新输入。");
@@ -7987,6 +8000,7 @@ $("#loginForm").addEventListener("submit", async (e) => {
     loadLoopConfig();
     const msgs = await apiLatestHistory();
     localStorage.setItem(LS_KEY, secret);
+    document.documentElement.classList.add("authed");
     startChat(msgs);
   }catch(err){
     secret = null;
