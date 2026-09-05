@@ -44,6 +44,7 @@ import json
 import os
 import re
 import sqlite3
+import hashlib
 import time
 import uuid
 from pathlib import Path
@@ -1326,8 +1327,33 @@ async def mcp_call(server: dict[str, Any], method: str, params: dict[str, Any] |
     return data.get("result") or {}
 
 
+# ── 工具名消毒:OpenAI/Anthropic 工具名只允许 [A-Za-z0-9_-] 且 ≤64 字符 ───
+# 中文 MCP 服务名(如「阿克的脑袋瓜」)拼出的 mcp_中文名_工具 会让网关/上游直接
+# 400 bad_response_status_code(逐工具实测全部崩、纯英文名全过)。
+# 这里把服务名/工具名消毒成合法 ASCII,并用映射表反解回真实名字以执行工具。
+_TOOL_NAME_MAP: dict[str, tuple[str, str]] = {}   # public_name -> (server_name, raw_tool_name)
+
+
+def _sanitize_segment(name: str) -> str:
+    """把一段名字清洗成网关可接受:非法字符压成 '_',压缩连续下划线、去头尾、截 24。"""
+    out = re.sub(r"[^A-Za-z0-9_-]+", "_", str(name or ""))
+    out = re.sub(r"_+", "_", out).strip("_")[:24]
+    return out
+
+
+def tool_public_name(server_name: str, raw_name: str) -> str:
+    """mcp_<服务器>_<工具> 的对外名;服务器段消毒后为空(全中文)时,
+    用名字的稳定短哈希兜底,保证不同中文服务名不撞车。"""
+    seg = _sanitize_segment(server_name)
+    if not seg:
+        seg = "s" + hashlib.md5(str(server_name).encode("utf-8")).hexdigest()[:8]
+    raw = _sanitize_segment(raw_name) or "tool"
+    return (f"mcp_{seg}_{raw}")[:64]
+
+
 async def mcp_tools() -> list[dict[str, Any]]:
     tools = []
+    _TOOL_NAME_MAP.clear()   # 每次重建映射;消毒名字按确定性规则生成,老映射会被覆盖
     for server in mcp_servers():
         if not server["enabled"]:
             continue
@@ -1339,7 +1365,9 @@ async def mcp_tools() -> list[dict[str, Any]]:
                     raw_name = str(tool["name"])
                     if raw_name in disabled:
                         continue
-                    tools.append({"type": "function", "function": {"name": f"mcp_{server['name']}_{raw_name}", "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
+                    public_name = tool_public_name(server["name"], raw_name)
+                    _TOOL_NAME_MAP[public_name] = (server["name"], raw_name)
+                    tools.append({"type": "function", "function": {"name": public_name, "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
         except Exception:
             continue
     return tools
@@ -1482,6 +1510,14 @@ async def warm_injection(session_id: str, *, is_new: bool) -> str:
 
 
 async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    # 消毒名字优先走映射表(服务名/工具名可能都含中文);没有映射再退回旧前缀解析。
+    mapped = _TOOL_NAME_MAP.get(tool_name)
+    if mapped:
+        sname, raw = mapped
+        for server in mcp_servers():
+            if server["enabled"] and server["name"] == sname:
+                return await mcp_call(server, "tools/call", {"name": raw, "arguments": arguments})
+        raise RuntimeError(f"MCP server {sname!r} unavailable")
     for server in mcp_servers():
         prefix = f"mcp_{server['name']}_"
         if server["enabled"] and tool_name.startswith(prefix):
@@ -1493,6 +1529,9 @@ async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[st
 def _tool_display_parts(tool_name: str) -> tuple[str, str]:
     """mcp_<服务器>_<工具名> → (服务器, 工具名);拆不出则返回 ("", 原名)。"""
     name = str(tool_name or "")
+    mapped = _TOOL_NAME_MAP.get(name)
+    if mapped:
+        return mapped[0], mapped[1]
     for server in mcp_servers():
         prefix = f"mcp_{server['name']}_"
         if name.startswith(prefix):
