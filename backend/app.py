@@ -371,6 +371,8 @@ def notification_from_message(msg: dict) -> dict:
 plugin_subs: set[asyncio.Queue] = set()  # AI side    (GET /channel/in)
 app_subs: set[asyncio.Queue] = set()     # human side (GET /app/stream)
 stream_drafts: dict[tuple[str, str], dict] = {}
+cancelled_streams: dict[tuple[str, str], float] = {}  # (stream_id, kind) -> stop ts: late deltas after "stop" are dropped
+pending_loop_streams: dict[str, float] = {}           # stream_id -> created ts (relay-generated ids handed to /loop/ingest)
 
 
 async def broadcast(subs: set, payload: dict) -> None:
@@ -412,11 +414,12 @@ def brain_target() -> str:
         return fallback
 
 
-def _forward_to_loop_sync(msg: dict) -> None:
+def _forward_to_loop_sync(msg: dict, stream_id: str) -> None:
     meta = msg.get("meta") or {}
     data = json.dumps({
         "id": msg.get("id"),
         "text": msg.get("text", ""),
+        "stream_id": stream_id,
         "session_id": meta.get("api_session") or "",
         "attachments": meta.get("attachments") or [],
     }, ensure_ascii=False).encode("utf-8")
@@ -432,10 +435,25 @@ def _forward_to_loop_sync(msg: dict) -> None:
 
 
 async def forward_to_loop(msg: dict) -> None:
+    stream_id = "loop-" + secrets.token_hex(8)
+    pending_loop_streams[stream_id] = datetime.now(timezone.utc).timestamp()
     try:
-        await asyncio.to_thread(_forward_to_loop_sync, msg)
+        await asyncio.to_thread(_forward_to_loop_sync, msg, stream_id)
     except Exception as exc:
         print(f"[loop] forward notify failed ({type(exc).__name__}: {exc}); loop keeps processing in background")
+
+
+def _loop_cancel_sync(ids: list[str]) -> None:
+    """Tell the api loop to abort the model calls behind these stream ids."""
+    data = json.dumps({"stream_ids": ids}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        loop_base_url() + "/loop/cancel",
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
 
 
 def prune_stream_drafts() -> None:
@@ -443,6 +461,10 @@ def prune_stream_drafts() -> None:
     stale = [k for k, v in stream_drafts.items() if now - float(v.get("updated_at") or 0) > STREAM_DRAFT_TTL]
     for k in stale:
         stream_drafts.pop(k, None)
+    for k in [k for k, ts in cancelled_streams.items() if now - ts > STREAM_DRAFT_TTL]:
+        cancelled_streams.pop(k, None)
+    for k in [k for k, ts in pending_loop_streams.items() if now - ts > STREAM_DRAFT_TTL]:
+        pending_loop_streams.pop(k, None)
 
 
 async def handle_stream_delta(kind: str, body: dict) -> dict:
@@ -458,6 +480,9 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
     meta = {k: v for k, v in body.items() if k not in ("type", "text", "done", "final_text")}
     meta["stream_id"] = stream_id
     key = (stream_id, base_kind)
+    if key in cancelled_streams:
+        # user tapped "stop" → late deltas must neither resurrect a bubble nor hit the db
+        return {"ok": True, "stream_id": stream_id, "cancelled": True}
     prune_stream_drafts()
 
     now_ts = datetime.now(timezone.utc).timestamp()
@@ -1272,15 +1297,26 @@ async def app_message_edit(mid: int, request: Request):
 @app.post("/app/stop")
 async def app_stop(request: Request):
     """Human tapped "stop": cancel in-flight stream drafts, clear the typing state,
-    and tell the AI side (best-effort) to stop generating."""
+    drop late deltas, and tell the AI side (best-effort) to stop generating."""
     check_auth(request)
-    await broadcast(plugin_subs, {"type": "stop"})
+    now = datetime.now(timezone.utc).timestamp()
     cancelled = [{"stream_id": key[0], "kind": key[1]} for key in list(stream_drafts.keys())]
+    for key in list(stream_drafts.keys()):
+        cancelled_streams[key] = now
     stream_drafts.clear()
+    loop_ids = [sid for sid in list(pending_loop_streams.keys())]
+    pending_loop_streams.clear()
+    await broadcast(plugin_subs, {"type": "stop"})
     await broadcast(app_subs, {"type": "typing", "active": False})
     if cancelled:
         await broadcast(app_subs, {"type": "stream_stop", "streams": cancelled})
-    return {"ok": True, "cancelled_streams": len(cancelled)}
+    if loop_ids:
+        # true cancellation: the api loop aborts its in-flight model call
+        try:
+            await asyncio.to_thread(_loop_cancel_sync, loop_ids)
+        except Exception as exc:
+            print(f"[loop] cancel notify failed ({type(exc).__name__}: {exc})")
+    return {"ok": True, "cancelled_streams": len(cancelled) + len(loop_ids)}
 
 
 WEB_DIR = Path(os.environ.get("RELAY_WEB_DIR", str(Path(__file__).parent.parent / "web")))

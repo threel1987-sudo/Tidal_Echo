@@ -363,6 +363,13 @@ async function handleFrame(frame: string): Promise<void> {
     tlog('in', `dropping non-JSON frame: ${data.slice(0, 120)}`)
     return
   }
+  // Control frames (no message id, no content) — e.g. relay's {"type":"stop"}.
+  // They must NOT be delivered as chat; CC has no protocol-level way to abort a
+  // running channel turn, so we just acknowledge them here.
+  if (msg.type === 'stop') {
+    tlog('stop', 'human tapped stop — CC turn cannot be interrupted from a channel MCP server')
+    return
+  }
   // human→AI chat: only advance the cursor after a successful delivery; skip
   // anything already seen (id<=cursor, which reconnect backfill may overlap).
   // A failed delivery (CC busy) does NOT advance — the next reconnect's ?since=

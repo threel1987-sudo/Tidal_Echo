@@ -84,6 +84,22 @@ TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
 STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 
+
+# ── 生成取消:用户点「停止」后,relay POST /loop/cancel 触发 ────────────────
+# 每个 stream_id 一个 asyncio.Event;模型流式消费循环里看到 event set 就抛
+# _GenerationCancelled,整个生成(含工具循环)立刻中止,不再回写最终回复。
+_CANCEL_EVENTS: dict[str, asyncio.Event] = {}
+
+
+class _GenerationCancelled(Exception):
+    pass
+
+
+def _cancel_event(stream_id: str) -> asyncio.Event | None:
+    if not stream_id:
+        return None
+    return _CANCEL_EVENTS.setdefault(stream_id, asyncio.Event())
+
 if not PERSONA and PERSONA_FILE:
     try:
         PERSONA = Path(PERSONA_FILE).read_text(encoding="utf-8").strip()
@@ -1097,13 +1113,13 @@ class _DeltaEmitter:
         except Exception as exc:
             print(f"[api_loop:stream] {self.kind} delta push error: {type(exc).__name__}: {exc}")
 
-    async def close(self) -> None:
-        """flush 剩余缓冲,并补一个 done 帧让 relay 把思考消息落库。"""
+    async def close(self, done_frame: bool = True) -> None:
+        """flush 剩余缓冲,并补一个 done 帧让 relay 把思考消息落库(done_frame=False 用于已取消的生成)。"""
         if self._timer is not None:
             self._timer.cancel()
             self._timer = None
         await self.flush()
-        if self.sent:
+        if self.sent and done_frame:
             try:
                 await relay_out({
                     "type": f"{self.kind}_delta",
@@ -1115,10 +1131,11 @@ class _DeltaEmitter:
                 pass
 
 
-async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None) -> dict[str, Any]:
+async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """一次 chat/completions 调用(流式消费,只攒正文/思考/工具调用)。
 
     sink(chunk) 可选:拿到正文增量就回调(用于 reply_delta 流式草稿)。
+    cancel_ev 可选:用户点了「停止」后置位 → 立即中止流式消费并抛 _GenerationCancelled。
     返回 {"text", "message", "usage", "thinking", "tool_calls"} —— message
     可直接回填进 messages 供工具续轮;自定义 headers 原样带在请求上。
     """
@@ -1171,6 +1188,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     err_detail = str(resp.status_code)
                 raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
             async for line in resp.aiter_lines():
+                if cancel_ev is not None and cancel_ev.is_set():
+                    raise _GenerationCancelled()
                 line = line.strip()
                 if not line.startswith("data:"):
                     continue
@@ -1518,20 +1537,23 @@ def mcp_result_text(data: dict[str, Any]) -> str:
 
 
 # ── 模型调用主入口:多模型 fallback ─────────────────────────────────────────
-async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False, on_thinking=None) -> dict[str, Any]:
+async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False, on_thinking=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """模型调用主入口:main_chain 顺次尝试,原生 tools + MCP 单路径。
 
     无工具 → 一次流式调用,正文增量经 sink 打 reply_delta 草稿;
     有工具 → 原生 tools 参数 + 8 轮上限工具循环,拿到最终正文为止。
+    cancel_ev 置位 → 抛 _GenerationCancelled(不落回 fallback,直接中止)。
     """
     tried = []
     last_error = ""
     all_tools = await mcp_tools()
+    if cancel_ev is not None and cancel_ev.is_set():
+        raise _GenerationCancelled()
     for route in main_chain():
         tried.append(route.get("model"))
         try:
             if all_tools:
-                return await _tool_loop(route, messages, all_tools, on_thinking=on_thinking, tried=tried)
+                return await _tool_loop(route, messages, all_tools, on_thinking=on_thinking, tried=tried, cancel_ev=cancel_ev)
             sink = None
             if emit_stream and STREAM_OUTPUT:
 
@@ -1544,10 +1566,12 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         "api_session": session_id,
                     })
 
-            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink)
+            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink, cancel_ev=cancel_ev)
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
+        except _GenerationCancelled:
+            raise
         except HTTPException as exc:
             if exc.status_code not in FALLBACK_CODES:
                 raise
@@ -1559,14 +1583,14 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     return {"text": "", "error": last_error or "all models failed", "tried": tried}
 
 
-async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, tried: list[str]) -> dict[str, Any]:
+async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, tried: list[str], cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """原生工具循环:模型出 tool_calls → 执行 MCP 工具 → 结果喂回,最多 8 轮。"""
     msgs = messages[:]
     first_thinking = None
     collected: list[dict[str, Any]] = []
     out: dict[str, Any] = {"text": "", "usage": {}}
     for round_idx in range(8):
-        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking)
+        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, cancel_ev=cancel_ev)
         if round_idx == 0 and out.get("thinking"):
             first_thinking = out["thinking"]
         msg = out.get("message") or {}
@@ -1577,6 +1601,8 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
             break
         msgs.append(msg)
         for call in calls:
+            if cancel_ev is not None and cancel_ev.is_set():
+                raise _GenerationCancelled()
             fn = call.get("function") or {}
             tool_name = str(fn.get("name") or "")
             try:
@@ -1683,8 +1709,17 @@ async def _proactive_loop() -> None:
 
 
 # ── 入站消息处理(handle_ingest) ────────────────────────────────────────────
-async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: bool = False, attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    stream_id = "api-" + uuid.uuid4().hex[:16]
+async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: bool = False, attachments: list[dict[str, Any]] | None = None, stream_id: str | None = None) -> dict[str, Any]:
+    stream_id = stream_id or ("api-" + uuid.uuid4().hex[:16])
+    cancel_ev = None if dry else _cancel_event(stream_id)
+    try:
+        out = await _handle_ingest_inner(text, msg_id, session_id, dry=dry, attachments=attachments, stream_id=stream_id, cancel_ev=cancel_ev)
+    finally:
+        _CANCEL_EVENTS.pop(stream_id, None)
+    return out
+
+
+async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *, dry: bool, attachments: list[dict[str, Any]] | None, stream_id: str, cancel_ev: asyncio.Event | None) -> dict[str, Any]:
     atts = [a for a in (attachments or []) if isinstance(a, dict)]
     image_parts = await attachment_parts(atts)
     # ── 苏醒垫层判定:首次见到的会话 = 新会话(handoff+feel+whisper);
@@ -1705,6 +1740,7 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
     thinking_stream: _DeltaEmitter | None = None
     if (not dry) and STREAM_OUTPUT:
         thinking_stream = _DeltaEmitter(stream_id, session_id, kind="thinking")
+    cancelled = False
     try:
         out = await run_model(
             messages,
@@ -1712,7 +1748,12 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
             session_id=session_id,
             emit_stream=not dry,
             on_thinking=thinking_stream.feed if thinking_stream else None,
+            cancel_ev=cancel_ev,
         )
+    except _GenerationCancelled:
+        cancelled = True
+        out = {"text": "", "cancelled": True}
+        print(f"[api_loop:cancel] generation aborted (stream_id={stream_id})")
     except HTTPException as exc:
         # 带图请求可能被中转端以 4xx 拒绝,留到下方统一走纯文本降级。
         if not image_parts or exc.status_code not in (400, 404, 422):
@@ -1720,9 +1761,12 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         print(f"[api_loop:image] multimodal request rejected (HTTP {exc.status_code}), falling back to text-only")
         out = {"text": "", "error": f"HTTP {exc.status_code}"}
     finally:
-        # 思考增量 flush + done 落库,必须先于最终回复到达 relay(消息次序)
+        # 思考增量 flush + done 落库,必须先于最终回复到达 relay(消息次序);
+        # 已取消的生成不再补 done 帧(relay 那边也会丢弃)。
         if thinking_stream is not None:
-            await thinking_stream.close()
+            await thinking_stream.close(done_frame=not cancelled)
+    if cancelled:
+        return {"ok": True, "cancelled": True, "api": {"runtime": "api_loop", "session": session_id}}
     if image_parts and not (out.get("text") or "").strip():
         fb = build_messages(text, before_id=msg_id, session_id=session_id, use_context=True, image_parts=None, warm_block=warm_block)
         if atts:
@@ -1730,7 +1774,9 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
             last_content = str(fb[-1].get("content") or "") if fb else ""
             fb[-1]["content"] = (last_content + "\n" + note) if last_content else note
         try:
-            fallback = await run_model(fb, stream_id=stream_id, session_id=session_id, emit_stream=False)
+            fallback = await run_model(fb, stream_id=stream_id, session_id=session_id, emit_stream=False, cancel_ev=cancel_ev)
+        except _GenerationCancelled:
+            return {"ok": True, "cancelled": True, "api": {"runtime": "api_loop", "session": session_id}}
         except Exception:
             fallback = None
         if fallback and (fallback.get("text") or "").strip():
@@ -1747,6 +1793,9 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
         "usage": out.get("usage") or {},
         "session": session_id,
     }
+    # 收尾前最后一次检查:生成完成后瞬间才收到停止,同样不发最终回复
+    if cancel_ev is not None and cancel_ev.is_set():
+        return {"ok": True, "cancelled": True, "api": meta}
     print(f"[api_loop:handle_ingest] model={out.get('model')}, has_thinking={bool(out.get('thinking'))}, has_tool_calls={bool(out.get('tool_calls'))}, images={len(image_parts)}")
     # 思考已实时流式推送(relay 落库为独立 thinking 消息)时,不再塞进回复 meta,
     # 否则 PWA 会同时渲染两份思考(流式思考行 + 回复的 meta 卡)。
@@ -1948,10 +1997,28 @@ async def loop_ingest(request: Request):
         before_id = int(msg_id) if msg_id is not None else None
     except Exception:
         before_id = None
+    stream_id = str(body.get("stream_id") or "").strip() or None  # relay 生成并透传,供 /loop/cancel 对齐
     # 不带 session 标记时保持无标记(旧主线),别继承上一次的 active 窗口,否则回复窜门。
     session_id = str(body.get("session_id") or body.get("api_session") or "").strip()
     dry = bool(body.get("dry"))
-    return await handle_ingest(text, before_id, session_id, dry=dry, attachments=attachments)
+    return await handle_ingest(text, before_id, session_id, dry=dry, attachments=attachments, stream_id=stream_id)
+
+
+@app.post("/loop/cancel")
+async def loop_cancel(request: Request):
+    """用户点了「停止」:relay 把在途 stream_id 送过来,置位它们的取消事件。
+    生成循环看到事件立抛 _GenerationCancelled,模型流即刻中止。"""
+    body = await request.json()
+    raw_ids = body.get("stream_ids")
+    ids = [str(x).strip() for x in raw_ids] if isinstance(raw_ids, list) else []
+    cancelled = 0
+    for sid in ids:
+        if sid:
+            ev = _CANCEL_EVENTS.setdefault(sid, asyncio.Event())
+            if not ev.is_set():
+                cancelled += 1
+                ev.set()
+    return {"ok": True, "cancelled": cancelled, "stream_ids": ids}
 
 
 if __name__ == "__main__":

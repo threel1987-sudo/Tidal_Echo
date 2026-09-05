@@ -7027,6 +7027,7 @@ function applyStreamDelta(ev){
   if (!msgInActiveSession({ meta })) return;
 
   const mapKey = streamMapKey(streamId, kind);
+  if (stoppedStreamKeys.has(mapKey)) return;   // 已停止的流:迟到增量直接丢弃,不再起新气泡
   const key = streamDrafts.get(mapKey) || streamDraftKey(streamId, kind);
   const existing = messageByKey.get(key);
   if (ev.done){
@@ -7160,6 +7161,13 @@ function onMessage(m){
     return;
   }
   if (!msgInActiveSession(m)) return;
+  // 该流已被用户「停止」定格:迟到落库的最终消息不得顶掉定格气泡、造成重复。
+  const lateStreamKey = (m.meta && m.meta.stream_id && (m.kind === "thinking" || m.kind === "reply"))
+    ? streamMapKey(String(m.meta.stream_id), m.kind) : "";
+  if (lateStreamKey && stoppedStreamKeys.has(lateStreamKey)){
+    removeStreamDraftForMessage(m, { render:false });
+    return;
+  }
   removeStreamDraftForMessage(m, { render:false });
   if (m.from === "ai") hideTyping();
   const key = msgKey(m.id);
@@ -7389,7 +7397,7 @@ const selectBarEl = $("#selectBar"), selectCountEl = $("#selectCount"),
       selectCancelBtnEl = $("#selectCancelBtn");
 
 function isSelectableMessage(m){
-  return !!(m && m.kind !== "thinking" && m.kind !== "act" && msgNum(m.id) > 0);
+  return !!(m && m.kind !== "act" && msgNum(m.id) > 0);
 }
 function selectableMessages(){
   return sortedMessages().filter(isSelectableMessage);
@@ -7585,6 +7593,10 @@ function updateStopUi(){
   }
 }
 const stoppedStreamKeys = new Set();   // "kind:streamId" — 已定格草稿,防止迟到的最终消息造成重复气泡
+function markStoppedStream(mapKey){      // 有界集合:只留最近 60 个,长会话不涨内存
+  stoppedStreamKeys.add(mapKey);
+  while (stoppedStreamKeys.size > 60) stoppedStreamKeys.delete(stoppedStreamKeys.values().next().value);
+}
 function finalizeAllDrafts({ render = true } = {}){
   let changed = false;
   Array.from(streamDrafts.keys()).forEach((mapKey) => {
@@ -7593,7 +7605,7 @@ function finalizeAllDrafts({ render = true } = {}){
     if (m){
       const meta = { ...(m.meta || {}) };
       delete meta.streaming;
-      stoppedStreamKeys.add(mapKey);
+      markStoppedStream(mapKey);
       setMessage({ ...m, meta, status:"sent" }, { render:false, cache:true });
       changed = true;
     }
