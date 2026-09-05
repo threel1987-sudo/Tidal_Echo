@@ -82,6 +82,7 @@ PERSONA = os.environ.get("PERSONA", "").strip()
 HISTORY_N = int(os.environ.get("HISTORY_N", "24"))
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
 TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
+LLM_FORCE_COLD = os.environ.get("LLM_FORCE_COLD", "") == "1"   # 后台冷冻采样:恒 temperature=0.1、不发 top_p(排查"说话飘"用)
 STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 
@@ -461,6 +462,8 @@ def spatial_block() -> str:
     return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
 
 def temperature() -> float:
+    if LLM_FORCE_COLD:
+        return 0.1
     try:
         v = float(load_config().get("temperature", TEMPERATURE))
         # 下限收 0.1:部分第三方中转收到 0 会按 1 处理甚至报参数错误
@@ -1153,7 +1156,9 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     # 采样参数二选一(OpenAI 规范:temperature/top_p 不同时发,部分网关只认其一):
     # top_p 被用户调低(<1.0)才算"想用核采样",此时只发 top_p;其余情况只发 temperature。
     tp = top_p()
-    if tp is not None and float(tp) < 1.0:
+    if LLM_FORCE_COLD:
+        body["temperature"] = temperature()   # 冷模式:恒 0.1,不发 top_p
+    elif tp is not None and float(tp) < 1.0:
         body["top_p"] = tp
     else:
         body["temperature"] = temperature()
@@ -1965,6 +1970,23 @@ async def loop_debug_chat(request: Request):
     route = chain[route_index] if 0 <= route_index < len(chain) else (chain[0] if chain else None)
     if not route:
         raise HTTPException(status_code=503, detail="no main_chain configured")
+    if params.get("dump"):
+        # 「看脑」:把 echo 实际组装出的 system 提示词 + 最近上下文原样返回,
+        # 排查"说话飘/人格跑偏"时对比 Kelivo 语境用。__dump_probe__ 只是占位不入历史。
+        msgs = build_messages("__dump_probe__", session_id="__legacy__", use_context=True)
+        system_full = ""
+        history: list[dict[str, str]] = []
+        for m in msgs:
+            if m.get("role") == "system":
+                system_full = str(m.get("content") or "")
+                continue
+            c = m.get("content")
+            if isinstance(c, list):
+                c = "".join(str(b.get("text") or "") for b in c if isinstance(b, dict))
+            txt = str(c or "").strip()
+            if txt and txt != "__dump_probe__":
+                history.append({"role": m.get("role"), "content": txt})
+        return {"ok": True, "system_prompt": system_full, "recent_history": history}
     prompt = str(params.get("prompt") or params.get("text") or "hello")
     if params.get("probe"):
         # 工具体检:逐个单独测每个工具 + 全量 + 无工具基准,区分
