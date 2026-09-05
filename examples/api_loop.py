@@ -1991,7 +1991,8 @@ async def loop_debug_chat(request: Request):
     if params.get("dump"):
         # 「看脑」:把 echo 实际组装出的 system 提示词 + 最近上下文原样返回,
         # 顺带按来源统计各段字数/token 估算 + 工具 schema 体积,精确定位"比 Kelivo 多喂的 token 在哪"。
-        msgs = build_messages("__dump_probe__", session_id="__legacy__", use_context=True)
+        dump_sid = active_session_id()
+        msgs = build_messages("__dump_probe__", session_id=dump_sid, use_context=True)
         system_full = str(msgs[0].get("content") or "") if msgs else ""
         system_sections: list[dict[str, Any]] = []
         for name, text in system_parts(warm_block=""):
@@ -2030,6 +2031,7 @@ async def loop_debug_chat(request: Request):
             "history_chars": history_chars,
             "history_tokens_est": history_tokens,
             "history_n_window": history_n(),
+            "dump_session": dump_sid or "__legacy__",
             "tools": {
                 "count": len(all_tools),
                 "total_chars": tools_total_chars,
