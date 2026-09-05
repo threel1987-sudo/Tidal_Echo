@@ -1159,9 +1159,6 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     mt = max_tokens()
     if mt is not None:
         body["max_tokens"] = mt
-    if tools:
-        body["tools"] = tools
-        body["tool_choice"] = "auto"
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
@@ -1175,55 +1172,70 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
 
     # OB 网关在工具续轮/召回阶段可能长时间不出字节,read 放宽到 600s,只保 connect 的 30s。
     client_timeout = httpx.Timeout(connect=30.0, read=600.0, write=60.0, pool=30.0)
+    url = route["url"].rstrip("/") + "/chat/completions"
+    # 兼容性:带 tools 时最多试两次 —— 第一次全量;若网关不认 OpenAI 格式工具
+    # (Anthropic 中转的转换层常在此崩溃),第二次摘掉 tools 纯文本重试,聊天永远不断。
+    attempts = [tools, None] if tools else [None]
     async with httpx.AsyncClient(timeout=client_timeout, trust_env=False) as client:
-        async with client.stream(
-            "POST",
-            route["url"].rstrip("/") + "/chat/completions",
-            headers=req_headers,
-            json=body,
-        ) as resp:
-            if resp.status_code >= 400:
-                err_detail = ""
-                try:
-                    lines = [line async for line in resp.aiter_lines()]
-                    err_detail = "\n".join(lines)[:500] or str(resp.status_code)
-                except Exception:
-                    err_detail = str(resp.status_code)
-                raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
-            async for line in resp.aiter_lines():
-                if cancel_ev is not None and cancel_ev.is_set():
-                    raise _GenerationCancelled()
-                line = line.strip()
-                if not line.startswith("data:"):
-                    continue
-                data_str = line[5:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    ev = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-                n = normalize_stream_event(ev)
-                if n["usage"]:
-                    usage = n["usage"]
-                if n["role"]:
-                    raw_msg["role"] = n["role"]
-                if n["content"]:
-                    text_parts.append(n["content"])
-                    if sink:
-                        try:
-                            await sink(n["content"])
-                        except Exception:
-                            pass
-                if n["thinking"]:
-                    thinking_parts.append(n["thinking"])
-                    if on_thinking:
-                        try:
-                            await on_thinking(n["thinking"])
-                        except Exception:
-                            pass
-                if n["tool_calls"]:
-                    accumulate_tool_calls(tool_calls_buf, n["tool_calls"])
+        for attempt_no, cur_tools in enumerate(attempts):
+            req_body = dict(body)
+            if cur_tools:
+                req_body["tools"] = cur_tools
+                req_body["tool_choice"] = "auto"
+            else:
+                req_body.pop("tools", None)
+                req_body.pop("tool_choice", None)
+            async with client.stream(
+                "POST",
+                url,
+                headers=req_headers,
+                json=req_body,
+            ) as resp:
+                if resp.status_code >= 400:
+                    err_detail = ""
+                    try:
+                        lines = [line async for line in resp.aiter_lines()]
+                        err_detail = "\n".join(lines)[:500] or str(resp.status_code)
+                    except Exception:
+                        err_detail = str(resp.status_code)
+                    if cur_tools and resp.status_code in (400, 404, 422):
+                        print(f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only")
+                        continue
+                    raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
+                async for line in resp.aiter_lines():
+                    if cancel_ev is not None and cancel_ev.is_set():
+                        raise _GenerationCancelled()
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        ev = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    n = normalize_stream_event(ev)
+                    if n["usage"]:
+                        usage = n["usage"]
+                    if n["role"]:
+                        raw_msg["role"] = n["role"]
+                    if n["content"]:
+                        text_parts.append(n["content"])
+                        if sink:
+                            try:
+                                await sink(n["content"])
+                            except Exception:
+                                pass
+                    if n["thinking"]:
+                        thinking_parts.append(n["thinking"])
+                        if on_thinking:
+                            try:
+                                await on_thinking(n["thinking"])
+                            except Exception:
+                                pass
+                    if n["tool_calls"]:
+                        accumulate_tool_calls(tool_calls_buf, n["tool_calls"])
 
     merged_thinking = merge_thinking(thinking_parts)
     tool_calls_parsed, raw_tool_calls = finalize_tool_calls(tool_calls_buf)

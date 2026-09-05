@@ -5023,11 +5023,20 @@ if (apiList) apiList.addEventListener("click", async (e) => {
 if (apiDebugBtn) apiDebugBtn.addEventListener("click", async () => {
   const route = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
   if (!route.url) { if (apiDebugOutput) { apiDebugOutput.style.display = "block"; apiDebugOutput.textContent = "请先填写 API 地址并保存"; } return; }
-  if (apiDebugOutput) { apiDebugOutput.style.display = "block"; apiDebugOutput.textContent = "正在测试..."; }
+  if (apiDebugOutput) { apiDebugOutput.style.display = "block"; apiDebugOutput.textContent = "正在测试（基础请求 + 最小工具请求）..."; }
+  const post = (payload) => fetch(`${API_BASE}/app/debug-chat`, { method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" }, body:JSON.stringify(payload) })
+    .then(r => r.json()).catch(err => ({ error: err.message || String(err) }));
   try {
-    const r = await fetch(`${API_BASE}/app/debug-chat`, { method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" }, body:JSON.stringify({}) });
-    const body = await r.json();
-    if (apiDebugOutput) apiDebugOutput.textContent = JSON.stringify(body, null, 2);
+    const plain = await post({});
+    const withTool = await post({ minimal_tool: true });
+    const errOf = (b) => (b && b.response_body && b.response_body.error) ? b.response_body.error : null;
+    if (apiDebugOutput) apiDebugOutput.textContent = JSON.stringify({
+      基础请求: { status: plain.status, error: errOf(plain) },
+      最小工具请求: { status: withTool.status, error: errOf(withTool) },
+      结论: (withTool.status === 200)
+        ? "网关支持 OpenAI 格式工具，没问题"
+        : "网关不认工具格式（正式聊天已自动降级为纯文本，仍能正常回复）",
+    }, null, 2);
   } catch (err) {
     if (apiDebugOutput) apiDebugOutput.textContent = `请求失败：${err.message || err}`;
   }
