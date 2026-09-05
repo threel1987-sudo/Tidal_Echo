@@ -5023,38 +5023,11 @@ if (apiList) apiList.addEventListener("click", async (e) => {
 if (apiDebugBtn) apiDebugBtn.addEventListener("click", async () => {
   const route = (savedLoopConfig && savedLoopConfig.main_chain || [])[0] || {};
   if (!route.url) { if (apiDebugOutput) { apiDebugOutput.style.display = "block"; apiDebugOutput.textContent = "请先填写 API 地址并保存"; } return; }
-  if (apiDebugOutput) { apiDebugOutput.style.display = "block"; apiDebugOutput.textContent = "正在测试（基础请求 + 最小工具请求）..."; }
-  const post = (payload) => fetch(`${API_BASE}/app/debug-chat`, { method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" }, body:JSON.stringify(payload) })
-    .then(r => r.json()).catch(err => ({ error: err.message || String(err) }));
+  if (apiDebugOutput) { apiDebugOutput.style.display = "block"; apiDebugOutput.textContent = "正在测试..."; }
   try {
-    const plain = await post({});
-    const withTool = await post({ minimal_tool: true });
-    const brain = await post({ dump: true });
-    const errOf = (b) => (b && b.response_body && b.response_body.error) ? b.response_body.error : null;
-    if (apiDebugOutput) apiDebugOutput.textContent = JSON.stringify({
-      基础请求: { status: plain.status, error: errOf(plain) },
-      最小工具请求: { status: withTool.status, error: errOf(withTool) },
-      结论: (withTool.status === 200)
-        ? "网关支持 OpenAI 格式工具，没问题"
-        : "网关不认工具格式（正式聊天已自动降级为纯文本，仍能正常回复）",
-      "看脑_输入构成": (() => {
-        if (brain.system_sections === undefined) return { error: brain.error || brain };
-        const sec = brain.system_sections.map(s => `${s.name}: ${s.chars} 字 ≈ ${s.tokens_est} token`);
-        const per = (brain.tools && Array.isArray(brain.tools.per_tool)) ? brain.tools.per_tool.slice().sort((a, b) => b.chars - a.chars) : [];
-        return {
-          分段: sec,
-          历史: `${brain.history_count} 条 / ${brain.history_chars} 字 ≈ ${brain.history_tokens_est} token（窗口上限 ${brain.history_n_window} 条，会话: ${brain.dump_session || "—"}）`,
-          工具schema: `${brain.tools.count} 个 / ${brain.tools.total_chars} 字 ≈ ${brain.tools.total_tokens_est} token`,
-          工具体积前三: per.slice(0, 3).map(t => `${t.name} (${t.chars} 字)`),
-          合计估算: `≈ ${brain.total_input_tokens_est} token（${brain.total_input_chars_est} 字符，不含图片）`,
-          口径说明: brain.note || "",
-        };
-      })(),
-      "看脑_system提示词": brain.system_prompt !== undefined
-        ? brain.system_prompt
-        : { error: brain.error || brain },
-      "看脑_最近上下文": brain.recent_history !== undefined ? brain.recent_history : [],
-    }, null, 2);
+    const r = await fetch(`${API_BASE}/app/debug-chat`, { method:"POST", headers:{ ...authHeaders(), "Content-Type":"application/json" }, body:JSON.stringify({}) });
+    const body = await r.json();
+    if (apiDebugOutput) apiDebugOutput.textContent = JSON.stringify(body, null, 2);
   } catch (err) {
     if (apiDebugOutput) apiDebugOutput.textContent = `请求失败：${err.message || err}`;
   }
@@ -5092,28 +5065,16 @@ if (mcpDebugBtn) mcpDebugBtn.addEventListener("click", async () => {
 if (mcpToolCallBtn) mcpToolCallBtn.addEventListener("click", async () => {
   if (mcpDebugOutput) {
     mcpDebugOutput.style.display = "block";
-    mcpDebugOutput.textContent = "正在给每个工具单独体检 + 全量对比...（约 20 个测试请求，请稍等）";
+    mcpDebugOutput.textContent = "正在发送带工具的测试请求到 Gateway...";
   }
   try {
     const r = await fetch(`${API_BASE}/app/debug-chat`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ probe: true })
+      body: JSON.stringify({ with_tools: true, prompt: "请使用 list_buckets_light 工具列出我最近的记忆桶" })
     });
     const body = await r.json();
-    const bad = (body.per_tool || []).filter(t => t.status >= 400);
-    const summary = {
-      无工具基准: body.baseline && body.baseline.status,
-      全部工具一起: body.all_together && body.all_together.status,
-      单独就崩的工具: bad.map(t => ({ name: t.name, status: t.status })),
-      单独全过的工具数: (body.per_tool || []).length - bad.length,
-      诊断: bad.length > 0
-        ? "有工具单独就崩 —— 是这些工具自身的定义踩了网关的雷，需要净化工具体检里崩掉的"
-        : ((body.all_together && body.all_together.status >= 400)
-          ? "每个工具单独都通过，但全部一起发就崩 —— 工具太多/总量超网关限制，需要限制每轮携带的工具数量"
-          : "全部通过，工具链正常"),
-    };
-    if (mcpDebugOutput) mcpDebugOutput.textContent = JSON.stringify({ ...summary, 原始数据: body }, null, 2);
+    if (mcpDebugOutput) mcpDebugOutput.textContent = JSON.stringify(body, null, 2);
   } catch (err) {
     if (mcpDebugOutput) mcpDebugOutput.textContent = `请求失败：${err.message || err}`;
   }

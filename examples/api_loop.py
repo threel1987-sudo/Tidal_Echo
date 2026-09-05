@@ -82,7 +82,7 @@ PERSONA = os.environ.get("PERSONA", "").strip()
 HISTORY_N = int(os.environ.get("HISTORY_N", "24"))
 MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
 TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
-LLM_FORCE_COLD = os.environ.get("LLM_FORCE_COLD", "") == "1"   # 后台冷冻采样:恒 temperature=0.1、不发 top_p(排查"说话飘"用)
+
 STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
 FALLBACK_CODES = {401, 403, 404, 408, 409, 429, 500, 502, 503, 504}
 
@@ -462,8 +462,6 @@ def spatial_block() -> str:
     return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
 
 def temperature() -> float:
-    if LLM_FORCE_COLD:
-        return 0.1
     try:
         v = float(load_config().get("temperature", TEMPERATURE))
         # 下限收 0.1:部分第三方中转收到 0 会按 1 处理甚至报参数错误
@@ -581,12 +579,8 @@ def relay_rows(before_id: int | None, session_id: str, limit: int) -> list[dict[
         where.append("id < ?")
         params.append(int(before_id))
     if session_id:
-        if session_id == "__legacy__":
-            # 与 relay 的 history_for_session 语义对齐:"__legacy__" = 未打会话标签的旧主线消息池
-            where.append("(json_extract(meta, '$.api_session') IS NULL OR json_extract(meta, '$.api_session') = '')")
-        else:
-            where.append("json_extract(meta, '$.api_session') = ?")
-            params.append(session_id)
+        where.append("json_extract(meta, '$.api_session') = ?")
+        params.append(session_id)
     else:
         where.append("(json_extract(meta, '$.api_session') IS NULL OR json_extract(meta, '$.api_session') = '')")
     sql = (
@@ -640,38 +634,23 @@ async def attachment_parts(atts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return parts
 
 
-def est_tokens(text: str) -> int:
-    """粗略 token 估算(「看脑」统计用,非精确):中文约 1 字 0.6 token,其余约 4 字符 1 token。"""
-    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
-    other = max(0, len(text) - cjk)
-    return int(cjk * 0.6 + other * 0.25)
-
-
-def system_parts(warm_block: str = "") -> list[tuple[str, str]]:
-    """把组装出的 system 提示词按来源拆成(段名, 文本)列表;build_messages 与「看脑」共用,保证口径一致。"""
-    tool_hint = " When a configured MCP tool can provide current, external, or actionable information, use it before answering."
-    parts: list[tuple[str, str]] = [("persona", persona()), ("builtin_tool_hint", tool_hint)]
+def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None, warm_block: str = "") -> list[dict[str, Any]]:
+    system_text = persona()
     inj_on, inj_rows = injections()
     if inj_on and inj_rows:
         blocks: list[str] = []
         for r in inj_rows:
             head = f"【{r['title']}】\n" if r["title"] else ""
             blocks.append((head + r["content"]).strip())
-        parts.append((
-            "injections",
+        system_text += (
             "\n\nThe following user-injected rules are currently active and must be followed:\n\n"
-            + "\n\n".join(blocks),
-        ))
+            + "\n\n".join(blocks)
+        )
     presence_block = spatial_block()
     if presence_block:
-        parts.append(("presence", "\n\n" + presence_block))
+        system_text += "\n\n" + presence_block
     if warm_block:
-        parts.append(("warm_layer", warm_block))
-    return parts
-
-
-def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None, warm_block: str = "") -> list[dict[str, Any]]:
-    system_text = "".join(text for _, text in system_parts(warm_block))
+        system_text += warm_block
     messages = [{"role": "system", "content": system_text}]
     if use_context:
         for row in relay_rows(before_id, session_id, history_n()):
@@ -1174,20 +1153,13 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     # 采样参数二选一(OpenAI 规范:temperature/top_p 不同时发,部分网关只认其一):
     # top_p 被用户调低(<1.0)才算"想用核采样",此时只发 top_p;其余情况只发 temperature。
     tp = top_p()
-    if LLM_FORCE_COLD:
-        body["temperature"] = temperature()   # 冷模式:恒 0.1,不发 top_p
-    elif tp is not None and float(tp) < 1.0:
+    if tp is not None and float(tp) < 1.0:
         body["top_p"] = tp
     else:
         body["temperature"] = temperature()
     mt = max_tokens()
     if mt is not None:
         body["max_tokens"] = mt
-    # 「输入体积探针」:每次请求打印估算 input token(消息+工具 schema),方便与网关日志的
-    # prompt_tokens 逐条对账——差额 = 网关自身注入的内容(如人格慢变块)或 tokenizer 口径差异。
-    _est_msg = sum(est_tokens(str(m.get("content") or "")) for m in messages)
-    _est_tools = est_tokens(json.dumps(tools, ensure_ascii=False)) if tools else 0
-    print(f"[api_loop:usage] model={route.get('model')} msgs={len(messages)} tools={len(tools or [])} est_input_tokens={_est_msg + _est_tools}", flush=True)
     req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
@@ -1993,91 +1965,7 @@ async def loop_debug_chat(request: Request):
     route = chain[route_index] if 0 <= route_index < len(chain) else (chain[0] if chain else None)
     if not route:
         raise HTTPException(status_code=503, detail="no main_chain configured")
-    if params.get("dump"):
-        # 「看脑」:把 echo 实际组装出的 system 提示词 + 最近上下文原样返回,
-        # 顺带按来源统计各段字数/token 估算 + 工具 schema 体积,精确定位"比 Kelivo 多喂的 token 在哪"。
-        dump_sid = active_session_id()
-        msgs = build_messages("__dump_probe__", session_id=dump_sid, use_context=True)
-        system_full = str(msgs[0].get("content") or "") if msgs else ""
-        system_sections: list[dict[str, Any]] = []
-        for name, text in system_parts(warm_block=""):
-            system_sections.append({"name": name, "chars": len(text), "tokens_est": est_tokens(text)})
-        history: list[dict[str, str]] = []
-        for m in msgs[1:]:
-            c = m.get("content")
-            if isinstance(c, list):
-                c = "".join(str(b.get("text") or "") for b in c if isinstance(b, dict))
-            txt = str(c or "").strip()
-            if txt and txt != "__dump_probe__":
-                history.append({"role": m.get("role"), "content": txt})
-        all_tools = await mcp_tools()
-        tools_report: list[dict[str, Any]] = []
-        for t in all_tools:
-            raw = json.dumps(t, ensure_ascii=False)
-            tools_report.append({
-                "name": str((t.get("function") or {}).get("name") or ""),
-                "chars": len(raw),
-                "tokens_est": est_tokens(raw),
-            })
-        tools_total_chars = sum(t["chars"] for t in tools_report)
-        tools_total_tokens = sum(t["tokens_est"] for t in tools_report)
-        history_chars = sum(len(h["content"]) for h in history)
-        history_tokens = sum(est_tokens(h["content"]) for h in history)
-        system_chars = sum(s["chars"] for s in system_sections)
-        system_tokens = sum(s["tokens_est"] for s in system_sections)
-        return {
-            "ok": True,
-            "system_prompt": system_full,
-            "system_sections": system_sections,
-            "system_chars": system_chars,
-            "system_tokens_est": system_tokens,
-            "recent_history": history,
-            "history_count": len(history),
-            "history_chars": history_chars,
-            "history_tokens_est": history_tokens,
-            "history_n_window": history_n(),
-            "dump_session": dump_sid or "__legacy__",
-            "tools": {
-                "count": len(all_tools),
-                "total_chars": tools_total_chars,
-                "total_tokens_est": tools_total_tokens,
-                "per_tool": tools_report,
-            },
-            "total_input_chars_est": system_chars + history_chars + tools_total_chars,
-            "total_input_tokens_est": system_tokens + history_tokens + tools_total_tokens,
-            "note": "token 为粗略估算(中文≈0.6/字,其余≈0.25/字符),不含图片;与网关报告的 prompt_tokens 会有出入。",
-        }
     prompt = str(params.get("prompt") or params.get("text") or "hello")
-    if params.get("probe"):
-        # 工具体检:逐个单独测每个工具 + 全量 + 无工具基准,区分
-        # "某个工具单独就崩"(其 schema 踩了网关翻译器的雷) 和 "数量太多才崩"(总量超限)。
-        all_tools = await mcp_tools()
-        req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
-        for hk, hv in (route.get("headers") or {}).items():
-            if str(hk) and str(hv):
-                req_headers[str(hk)] = str(hv)
-        url = route["url"].rstrip("/") + "/chat/completions"
-        messages = build_messages("hi", before_id=None, session_id="probe", use_context=False)
-        async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
-            async def one(tool_list, label):
-                b = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 50, "stream": False}
-                if tool_list:
-                    b["tools"] = tool_list
-                    b["tool_choice"] = "auto"
-                resp = await client.post(url, headers=req_headers, json=b)
-                err = None
-                if resp.status_code >= 400:
-                    try:
-                        err = resp.json()
-                    except Exception:
-                        err = resp.text[:300]
-                return {"name": label, "status": resp.status_code, "error": err}
-            per_tool = []
-            for t in all_tools:
-                per_tool.append(await one([t], t["function"]["name"]))
-            baseline = await one([], "__baseline_no_tools__")
-            all_together = await one(all_tools, "__all_together__")
-        return {"ok": True, "tools_count": len(all_tools), "baseline": baseline, "all_together": all_together, "per_tool": per_tool}
     minimal_tool = bool(params.get("minimal_tool", False))
     with_tools = bool(params.get("with_tools", False)) or minimal_tool
     tools: list[dict[str, Any]] = []
