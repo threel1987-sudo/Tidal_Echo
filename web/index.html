@@ -5037,6 +5037,19 @@ if (apiDebugBtn) apiDebugBtn.addEventListener("click", async () => {
       结论: (withTool.status === 200)
         ? "网关支持 OpenAI 格式工具，没问题"
         : "网关不认工具格式（正式聊天已自动降级为纯文本，仍能正常回复）",
+      "看脑_输入构成": (() => {
+        if (brain.system_sections === undefined) return { error: brain.error || brain };
+        const sec = brain.system_sections.map(s => `${s.name}: ${s.chars} 字 ≈ ${s.tokens_est} token`);
+        const per = (brain.tools && Array.isArray(brain.tools.per_tool)) ? brain.tools.per_tool.slice().sort((a, b) => b.chars - a.chars) : [];
+        return {
+          分段: sec,
+          历史: `${brain.history_count} 条 / ${brain.history_chars} 字 ≈ ${brain.history_tokens_est} token`,
+          工具schema: `${brain.tools.count} 个 / ${brain.tools.total_chars} 字 ≈ ${brain.tools.total_tokens_est} token`,
+          工具体积前三: per.slice(0, 3).map(t => `${t.name} (${t.chars} 字)`),
+          合计估算: `≈ ${brain.total_input_tokens_est} token（${brain.total_input_chars_est} 字符，不含图片）`,
+          口径说明: brain.note || "",
+        };
+      })(),
       "看脑_system提示词": brain.system_prompt !== undefined
         ? brain.system_prompt
         : { error: brain.error || brain },

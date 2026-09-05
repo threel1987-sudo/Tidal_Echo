@@ -636,24 +636,38 @@ async def attachment_parts(atts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return parts
 
 
-def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None, warm_block: str = "") -> list[dict[str, Any]]:
+def est_tokens(text: str) -> int:
+    """粗略 token 估算(「看脑」统计用,非精确):中文约 1 字 0.6 token,其余约 4 字符 1 token。"""
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    other = max(0, len(text) - cjk)
+    return int(cjk * 0.6 + other * 0.25)
+
+
+def system_parts(warm_block: str = "") -> list[tuple[str, str]]:
+    """把组装出的 system 提示词按来源拆成(段名, 文本)列表;build_messages 与「看脑」共用,保证口径一致。"""
     tool_hint = " When a configured MCP tool can provide current, external, or actionable information, use it before answering."
-    system_text = persona() + tool_hint
+    parts: list[tuple[str, str]] = [("persona", persona()), ("builtin_tool_hint", tool_hint)]
     inj_on, inj_rows = injections()
     if inj_on and inj_rows:
         blocks: list[str] = []
         for r in inj_rows:
             head = f"【{r['title']}】\n" if r["title"] else ""
             blocks.append((head + r["content"]).strip())
-        system_text += (
+        parts.append((
+            "injections",
             "\n\nThe following user-injected rules are currently active and must be followed:\n\n"
-            + "\n\n".join(blocks)
-        )
+            + "\n\n".join(blocks),
+        ))
     presence_block = spatial_block()
     if presence_block:
-        system_text += "\n\n" + presence_block
+        parts.append(("presence", "\n\n" + presence_block))
     if warm_block:
-        system_text += warm_block
+        parts.append(("warm_layer", warm_block))
+    return parts
+
+
+def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None, warm_block: str = "") -> list[dict[str, Any]]:
+    system_text = "".join(text for _, text in system_parts(warm_block))
     messages = [{"role": "system", "content": system_text}]
     if use_context:
         for row in relay_rows(before_id, session_id, history_n()):
@@ -1972,21 +1986,55 @@ async def loop_debug_chat(request: Request):
         raise HTTPException(status_code=503, detail="no main_chain configured")
     if params.get("dump"):
         # 「看脑」:把 echo 实际组装出的 system 提示词 + 最近上下文原样返回,
-        # 排查"说话飘/人格跑偏"时对比 Kelivo 语境用。__dump_probe__ 只是占位不入历史。
+        # 顺带按来源统计各段字数/token 估算 + 工具 schema 体积,精确定位"比 Kelivo 多喂的 token 在哪"。
         msgs = build_messages("__dump_probe__", session_id="__legacy__", use_context=True)
-        system_full = ""
+        system_full = str(msgs[0].get("content") or "") if msgs else ""
+        system_sections: list[dict[str, Any]] = []
+        for name, text in system_parts(warm_block=""):
+            system_sections.append({"name": name, "chars": len(text), "tokens_est": est_tokens(text)})
         history: list[dict[str, str]] = []
-        for m in msgs:
-            if m.get("role") == "system":
-                system_full = str(m.get("content") or "")
-                continue
+        for m in msgs[1:]:
             c = m.get("content")
             if isinstance(c, list):
                 c = "".join(str(b.get("text") or "") for b in c if isinstance(b, dict))
             txt = str(c or "").strip()
             if txt and txt != "__dump_probe__":
                 history.append({"role": m.get("role"), "content": txt})
-        return {"ok": True, "system_prompt": system_full, "recent_history": history}
+        all_tools = await mcp_tools()
+        tools_report: list[dict[str, Any]] = []
+        for t in all_tools:
+            raw = json.dumps(t, ensure_ascii=False)
+            tools_report.append({
+                "name": str((t.get("function") or {}).get("name") or ""),
+                "chars": len(raw),
+                "tokens_est": est_tokens(raw),
+            })
+        tools_total_chars = sum(t["chars"] for t in tools_report)
+        tools_total_tokens = sum(t["tokens_est"] for t in tools_report)
+        history_chars = sum(len(h["content"]) for h in history)
+        history_tokens = sum(est_tokens(h["content"]) for h in history)
+        system_chars = sum(s["chars"] for s in system_sections)
+        system_tokens = sum(s["tokens_est"] for s in system_sections)
+        return {
+            "ok": True,
+            "system_prompt": system_full,
+            "system_sections": system_sections,
+            "system_chars": system_chars,
+            "system_tokens_est": system_tokens,
+            "recent_history": history,
+            "history_count": len(history),
+            "history_chars": history_chars,
+            "history_tokens_est": history_tokens,
+            "tools": {
+                "count": len(all_tools),
+                "total_chars": tools_total_chars,
+                "total_tokens_est": tools_total_tokens,
+                "per_tool": tools_report,
+            },
+            "total_input_chars_est": system_chars + history_chars + tools_total_chars,
+            "total_input_tokens_est": system_tokens + history_tokens + tools_total_tokens,
+            "note": "token 为粗略估算(中文≈0.6/字,其余≈0.25/字符),不含图片;与网关报告的 prompt_tokens 会有出入。",
+        }
     prompt = str(params.get("prompt") or params.get("text") or "hello")
     if params.get("probe"):
         # 工具体检:逐个单独测每个工具 + 全量 + 无工具基准,区分
