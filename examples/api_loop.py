@@ -1132,10 +1132,12 @@ class _DeltaEmitter:
                 pass
 
 
-async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
+async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, on_restart=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """一次 chat/completions 调用(流式消费,只攒正文/思考/工具调用)。
 
     sink(chunk) 可选:拿到正文增量就回调(用于 reply_delta 流式草稿)。
+    on_restart() 可选:流内检测到「重生」(网关在同一 SSE 流里重新发起了一次
+    完整生成)时回调,用于轮换 thinking 发射器等外部状态。
     cancel_ev 可选:用户点了「停止」后置位 → 立即中止流式消费并抛 _GenerationCancelled。
     返回 {"text", "message", "usage", "thinking", "tool_calls"} —— message
     可直接回填进 messages 供工具续轮;自定义 headers 原样带在请求上。
@@ -1203,6 +1205,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                         print(f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only")
                         continue
                     raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
+                saw_finish = False
+                restart_count = 0
                 async for line in resp.aiter_lines():
                     if cancel_ev is not None and cancel_ev.is_set():
                         raise _GenerationCancelled()
@@ -1217,6 +1221,30 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     except json.JSONDecodeError:
                         continue
                     n = normalize_stream_event(ev)
+                    # ── 流内重生检测 ──────────────────────────────────────────
+                    # 部分中转网关在生成中途失败后,会在同一条 SSE 流里重新发起一次
+                    # 完整生成(重新下发 role=assistant,或先补 finish_reason 再继续
+                    # 吐正文),若不处理,最终正文会是两段风格不同的完整回复拼在一起
+                    # ——即用户看到的「一个大气泡里精神分裂」。
+                    # 检测到重生 → 作废第一代的正文/思考/工具/usage,只保留最新一代;
+                    # done 帧的 final_text 会整体覆盖 relay 草稿,持久化结果只含最新一代。
+                    if (n["role"] and (text_parts or thinking_parts)) or \
+                       (saw_finish and (n["content"] or n["thinking"] or n["tool_calls"])):
+                        restart_count += 1
+                        text_parts.clear()
+                        thinking_parts.clear()
+                        tool_calls_buf.clear()
+                        usage = {}
+                        raw_msg = {}
+                        saw_finish = False
+                        print(f"[api_loop:stream] mid-stream generation restart detected (#{restart_count}); dropping earlier partial output")
+                        if on_restart:
+                            try:
+                                await on_restart()
+                            except Exception:
+                                pass
+                    if n["finish_reason"]:
+                        saw_finish = True
                     if n["usage"]:
                         usage = n["usage"]
                     if n["role"]:
@@ -1591,7 +1619,7 @@ def mcp_result_text(data: dict[str, Any]) -> str:
 
 
 # ── 模型调用主入口:多模型 fallback ─────────────────────────────────────────
-async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False, on_thinking=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
+async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False, on_thinking=None, on_restart=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """模型调用主入口:main_chain 顺次尝试,原生 tools + MCP 单路径。
 
     无工具 → 一次流式调用,正文增量经 sink 打 reply_delta 草稿;
@@ -1607,7 +1635,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
         tried.append(route.get("model"))
         try:
             if all_tools:
-                return await _tool_loop(route, messages, all_tools, on_thinking=on_thinking, tried=tried, cancel_ev=cancel_ev)
+                return await _tool_loop(route, messages, all_tools, on_thinking=on_thinking, on_restart=on_restart, tried=tried, cancel_ev=cancel_ev)
             sink = None
             if emit_stream and STREAM_OUTPUT:
 
@@ -1620,7 +1648,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         "api_session": session_id,
                     })
 
-            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink, cancel_ev=cancel_ev)
+            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink, on_restart=on_restart, cancel_ev=cancel_ev)
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
@@ -1637,14 +1665,14 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     return {"text": "", "error": last_error or "all models failed", "tried": tried}
 
 
-async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, tried: list[str], cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
+async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, on_restart=None, tried: list[str], cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """原生工具循环:模型出 tool_calls → 执行 MCP 工具 → 结果喂回,最多 8 轮。"""
     msgs = messages[:]
     first_thinking = None
     collected: list[dict[str, Any]] = []
     out: dict[str, Any] = {"text": "", "usage": {}}
     for round_idx in range(8):
-        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, cancel_ev=cancel_ev)
+        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, on_restart=on_restart, cancel_ev=cancel_ev)
         if round_idx == 0 and out.get("thinking"):
             first_thinking = out["thinking"]
         msg = out.get("message") or {}
@@ -1794,6 +1822,23 @@ async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *
     thinking_stream: _DeltaEmitter | None = None
     if (not dry) and STREAM_OUTPUT:
         thinking_stream = _DeltaEmitter(stream_id, session_id, kind="thinking")
+
+    async def _on_thinking(chunk: str) -> None:
+        if thinking_stream is not None:
+            await thinking_stream.feed(chunk)
+
+    async def _on_stream_restart() -> None:
+        # 同一条 SSE 流里网关重启了生成:收尾旧 thinking 草稿(已落库为独立气泡),
+        # 再开一个新的 emitter 攒最新一代,否则两代思考会粘连成一条 thinking 气泡。
+        nonlocal thinking_stream
+        if thinking_stream is None:
+            return
+        try:
+            await thinking_stream.close(done_frame=True)
+        except Exception:
+            pass
+        thinking_stream = _DeltaEmitter(stream_id, session_id, kind="thinking")
+
     cancelled = False
     try:
         out = await run_model(
@@ -1801,7 +1846,8 @@ async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *
             stream_id=stream_id,
             session_id=session_id,
             emit_stream=not dry,
-            on_thinking=thinking_stream.feed if thinking_stream else None,
+            on_thinking=_on_thinking,
+            on_restart=_on_stream_restart,
             cancel_ev=cancel_ev,
         )
     except _GenerationCancelled:
