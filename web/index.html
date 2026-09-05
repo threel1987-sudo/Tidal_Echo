@@ -5074,16 +5074,28 @@ if (mcpDebugBtn) mcpDebugBtn.addEventListener("click", async () => {
 if (mcpToolCallBtn) mcpToolCallBtn.addEventListener("click", async () => {
   if (mcpDebugOutput) {
     mcpDebugOutput.style.display = "block";
-    mcpDebugOutput.textContent = "正在发送带工具的测试请求到 Gateway...";
+    mcpDebugOutput.textContent = "正在给每个工具单独体检 + 全量对比...（约 20 个测试请求，请稍等）";
   }
   try {
     const r = await fetch(`${API_BASE}/app/debug-chat`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ with_tools: true, prompt: "请使用 list_buckets_light 工具列出我最近的记忆桶" })
+      body: JSON.stringify({ probe: true })
     });
     const body = await r.json();
-    if (mcpDebugOutput) mcpDebugOutput.textContent = JSON.stringify(body, null, 2);
+    const bad = (body.per_tool || []).filter(t => t.status >= 400);
+    const summary = {
+      无工具基准: body.baseline && body.baseline.status,
+      全部工具一起: body.all_together && body.all_together.status,
+      单独就崩的工具: bad.map(t => ({ name: t.name, status: t.status })),
+      单独全过的工具数: (body.per_tool || []).length - bad.length,
+      诊断: bad.length > 0
+        ? "有工具单独就崩 —— 是这些工具自身的定义踩了网关的雷，需要净化工具体检里崩掉的"
+        : ((body.all_together && body.all_together.status >= 400)
+          ? "每个工具单独都通过，但全部一起发就崩 —— 工具太多/总量超网关限制，需要限制每轮携带的工具数量"
+          : "全部通过，工具链正常"),
+    };
+    if (mcpDebugOutput) mcpDebugOutput.textContent = JSON.stringify({ ...summary, 原始数据: body }, null, 2);
   } catch (err) {
     if (mcpDebugOutput) mcpDebugOutput.textContent = `请求失败：${err.message || err}`;
   }

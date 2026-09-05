@@ -1927,6 +1927,36 @@ async def loop_debug_chat(request: Request):
     if not route:
         raise HTTPException(status_code=503, detail="no main_chain configured")
     prompt = str(params.get("prompt") or params.get("text") or "hello")
+    if params.get("probe"):
+        # 工具体检:逐个单独测每个工具 + 全量 + 无工具基准,区分
+        # "某个工具单独就崩"(其 schema 踩了网关翻译器的雷) 和 "数量太多才崩"(总量超限)。
+        all_tools = await mcp_tools()
+        req_headers = {"Authorization": f"Bearer {route['key']}", "Content-Type": "application/json"}
+        for hk, hv in (route.get("headers") or {}).items():
+            if str(hk) and str(hv):
+                req_headers[str(hk)] = str(hv)
+        url = route["url"].rstrip("/") + "/chat/completions"
+        messages = build_messages("hi", before_id=None, session_id="probe", use_context=False)
+        async with httpx.AsyncClient(timeout=60, trust_env=False) as client:
+            async def one(tool_list, label):
+                b = {"model": route["model"], "messages": messages, "temperature": TEMPERATURE, "max_tokens": 50, "stream": False}
+                if tool_list:
+                    b["tools"] = tool_list
+                    b["tool_choice"] = "auto"
+                resp = await client.post(url, headers=req_headers, json=b)
+                err = None
+                if resp.status_code >= 400:
+                    try:
+                        err = resp.json()
+                    except Exception:
+                        err = resp.text[:300]
+                return {"name": label, "status": resp.status_code, "error": err}
+            per_tool = []
+            for t in all_tools:
+                per_tool.append(await one([t], t["function"]["name"]))
+            baseline = await one([], "__baseline_no_tools__")
+            all_together = await one(all_tools, "__all_together__")
+        return {"ok": True, "tools_count": len(all_tools), "baseline": baseline, "all_together": all_together, "per_tool": per_tool}
     minimal_tool = bool(params.get("minimal_tool", False))
     with_tools = bool(params.get("with_tools", False)) or minimal_tool
     tools: list[dict[str, Any]] = []
