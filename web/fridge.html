@@ -278,6 +278,7 @@ button{ font:inherit; color:inherit; cursor:pointer; border:none; background:non
   <div class="gatebox">
     <p>没读到访问密钥——先在主页登录，或在此粘贴密钥（与 PWA 同一个）。</p>
     <input type="text" id="gateInput" placeholder="访问密钥">
+    <p class="hidden" id="gateErr" style="color:var(--danger);font-size:12.5px;text-align:center;margin:10px 0 0"></p>
     <div class="row">
       <button class="ghost" id="gateHome">去主页</button>
       <button class="send" id="gateSave">保存并进入</button>
@@ -324,8 +325,14 @@ function authHeaders(extra){ return Object.assign({"Authorization":"Bearer "+sec
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 async function api(path,opts){
-  const r=await fetch(API_BASE+path, opts||{headers:authHeaders()});
-  if(r.status===401){ secret=""; localStorage.removeItem(LS_KEY); show("gate"); throw new Error("401"); }
+  // 始终合并鉴权头:之前 opts 非空(如 DELETE)会丢掉 Authorization,导致后端永远 401、删除变成"无限弹门"
+  const o=Object.assign({}, opts||{}, {headers:authHeaders((opts&&opts.headers)||{})});
+  const r=await fetch(API_BASE+path, o);
+  if(r.status===401){
+    secret=""; localStorage.removeItem(LS_KEY);
+    const g=$("gateErr"); if(g){ g.textContent="密钥没通过验证,刚才的操作没有执行——重新输入正确的密钥再试。"; g.classList.remove("hidden"); }
+    show("gate"); throw new Error("401");
+  }
   if(!r.ok){ let d=""; try{ d=(await r.json()).detail; }catch(_){} throw new Error(d||("HTTP "+r.status)); }
   return r;
 }
@@ -389,7 +396,8 @@ function render(){
         ${rd}
       </div>`;
     el.querySelector(".x").onclick=()=>{
-      if(confirm("把这张纸条从冰箱门上撕下来?")) tear(n.id);
+      if(confirm("把这张纸条从冰箱门上撕下来?"))
+        tear(n.id).then(()=>refresh()).catch(e=>{ if(e.message!=="401") err("没撕掉:"+e.message); });
     };
     const rdBtn=el.querySelector(".rd");
     if(rdBtn) rdBtn.onclick=()=>readNote(n.id);
@@ -541,6 +549,7 @@ setInterval(()=>{ if(secret&&!document.hidden) refresh(); },30000);
 /* ── 启动 ── */
 async function boot(){
   if(!secret){ show("gate"); return; }
+  $("gateErr").classList.add("hidden");
   show("main");
   await refresh();
   openStream();
