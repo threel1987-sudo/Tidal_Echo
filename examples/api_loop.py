@@ -697,6 +697,7 @@ def public_config() -> dict[str, Any]:
         "history_n": history_n(),
         "persona": cfg.get("persona", ""),
         "ai_name": cfg.get("ai_name", ""),
+        "memory_url": str(cfg.get("memory_url") or ""),
         "ai_avatar": str(cfg.get("ai_avatar") or ""),
         "temperature": cfg.get("temperature", TEMPERATURE),
         "top_p": cfg.get("top_p", None),
@@ -733,6 +734,11 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
         cfg["persona"] = str(body.get("persona") or "").strip()
     if "ai_name" in body:
         cfg["ai_name"] = str(body.get("ai_name") or "").strip()
+    if "memory_url" in body:
+        # 主菜单 Memory 入口的跳转地址(OB dashboard 等公网链接);
+        # 只收 http(s) 链接,留空/非法则清空。这里不碰记忆读写,只是个跳板。
+        _mem = str(body.get("memory_url") or "").strip()
+        cfg["memory_url"] = _mem if _mem.startswith(("http://", "https://")) else ""
     if "ai_avatar" in body:
         # 只收小尺寸的 data:image/ dataURL(前端已压到 ~512px);非法或过大则清空
         raw = str(body.get("ai_avatar") or "")

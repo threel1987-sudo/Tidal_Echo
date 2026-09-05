@@ -2528,6 +2528,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
             <span class="config-entry-copy"><strong>模型参数</strong><span id="modelParamsEntryStatus">温度·上下文·Token·思考</span></span>
           </button>
+          <button class="config-entry" id="openMemoryConfigBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M3 4a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v3H3z"/><path d="M12 11v4"/></svg>
+            <span class="config-entry-copy"><strong>记忆仓库</strong><span id="memoryEntryStatus">Memory 入口的跳转地址</span></span>
+          </button>
           <button class="config-entry" id="openInjectConfigBtn" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
             <span class="config-entry-copy"><strong>指令注入</strong><span id="injectEntryStatus">开关控制 · 规则条目</span></span>
@@ -2587,6 +2591,17 @@
         </div>
         <div class="config-actions"><button class="config-action primary" id="personaSaveBtn" type="button">保存人设</button></div>
         <div class="push-hint" id="personaConfigHint"></div>
+      </section>
+
+      <section class="settings-card config-view" id="memoryConfigView">
+        <div class="config-view-head"><button class="config-view-back" data-config-back type="button" aria-label="返回连接与工具">‹</button><div class="config-view-title"><strong>记忆仓库</strong><span>主菜单 Memory 入口点开后跳转的地址</span></div></div>
+        <div class="config-fields">
+          <div class="config-field-label">OB dashboard 链接（他的记忆仓库）</div>
+          <input id="memoryUrlInput" type="url" placeholder="https://…（Obsidian Publish 或你的公网页面）" autocomplete="url">
+        </div>
+        <div class="config-actions"><button class="config-action primary" id="memorySaveBtn" type="button">保存地址</button></div>
+        <div class="push-hint" id="memoryConfigHint"></div>
+        <div class="push-hint" style="margin-top:6px">这里只存一个跳转链接，不碰记忆的读写——他的记忆仍在 OB 那一套里。留空时，Memory 入口会提示先把地址填上。</div>
       </section>
 
       <section class="settings-card config-view" id="modelParamsConfigView">
@@ -2799,7 +2814,7 @@
         <button class="menu-item" type="button" data-menu="memory">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.8 5 3.5 7.7 8.5 8.5-5 .8-7.7 3.5-8.5 8.5-.8-5-3.5-7.7-8.5-8.5 5-.8 7.7-3.5 8.5-8.5Z"/></svg></span>
           <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Memory</span><span class="menu-sub">The echoes we keep.</span></span>
+          <span class="menu-copy"><span class="menu-name">Memory</span><span class="menu-sub">A door to his vault.</span></span>
           <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
         </button>
         <button class="menu-item" type="button" data-menu="tides">
@@ -3009,6 +3024,7 @@ const temperatureInput = $("#temperatureInput"), topPInput = $("#topPInput"), hi
 const injectConfigView = $("#injectConfigView"), openInjectConfigBtn = $("#openInjectConfigBtn"), injectEnabledInput = $("#injectEnabledInput"), injectEntriesList = $("#injectEntriesList"), injectAddBtn = $("#injectAddBtn"), injectSaveBtn = $("#injectSaveBtn"), injectConfigHint = $("#injectConfigHint"), injectEntryStatus = $("#injectEntryStatus");
 const proactiveConfigView = $("#proactiveConfigView"), openProactiveConfigBtn = $("#openProactiveConfigBtn"), proactiveEnabledInput = $("#proactiveEnabledInput"), proactiveIdleInput = $("#proactiveIdleInput"), proactiveCooldownInput = $("#proactiveCooldownInput"), proactiveMaxDayInput = $("#proactiveMaxDayInput"), proactiveQuietEnabledInput = $("#proactiveQuietEnabledInput"), proactiveQuietStartInput = $("#proactiveQuietStartInput"), proactiveQuietEndInput = $("#proactiveQuietEndInput"), proactiveTzSelect = $("#proactiveTzSelect"), proactiveSaveBtn = $("#proactiveSaveBtn"), proactiveConfigHint = $("#proactiveConfigHint"), proactiveEntryStatus = $("#proactiveEntryStatus");
 const dataConfigView = $("#dataConfigView"), openDataConfigBtn = $("#openDataConfigBtn"), dataEntryStatus = $("#dataEntryStatus");
+const memoryConfigView = $("#memoryConfigView"), openMemoryConfigBtn = $("#openMemoryConfigBtn"), memoryUrlInput = $("#memoryUrlInput"), memorySaveBtn = $("#memorySaveBtn"), memoryConfigHint = $("#memoryConfigHint");
 const roomPanel = $("#roomPanel"), roomCloseBtn = $("#roomClose");
 const scenarioSeg = $("#scenarioSeg"), roomList = $("#roomList"), addRoomBtn = $("#addRoomBtn"), homeTemplateBtn = $("#homeTemplateBtn"), roomSaveBtn = $("#roomSaveBtn"), roomConfigHint = $("#roomConfigHint");
 const presenceCapsule = $("#presenceCapsule"), presenceOverlay = $("#presenceOverlay"), presenceScrim = $("#presenceScrim"), presenceCloseBtn = $("#presenceCloseBtn"), presenceScenarios = $("#presenceScenarios"), presenceRoomsWrap = $("#presenceRoomsWrap"), presenceRoomChips = $("#presenceRoomChips"), presenceManageBtn = $("#presenceManageBtn");
@@ -3206,6 +3222,7 @@ if (menuPanel){
     if (!item) return;
     if (item.dataset.menu === "chat") closeMenu();       // back to chat
     else if (item.dataset.menu === "fridge") location.assign("fridge.html");  // 冰箱门便利贴(数据在 relay)
+    else if (item.dataset.menu === "memory") location.assign("memory.html");  // 记忆仓库:中间页 → 跳 OB dashboard
     else if (item.dataset.menu === "room"){ closeMenu(); openRoomPanel(); loadRoomConfig(); }  // 主菜单 → 独立的房间设置页（干净：无头像/主题）
     else showToast("即将开放");                           // placeholder items
   });
@@ -4136,6 +4153,7 @@ function setConfigView(view){
   if (injectConfigView) injectConfigView.classList.toggle("active", view === "inject");
   if (proactiveConfigView) proactiveConfigView.classList.toggle("active", view === "proactive");
   if (dataConfigView) dataConfigView.classList.toggle("active", view === "data");
+  if (memoryConfigView) memoryConfigView.classList.toggle("active", view === "memory");
 }
 function resetMcpForm(){
   editingMcpIndex = null;
@@ -4500,6 +4518,20 @@ async function loadModelParamsConfig(){
 }
 $("#openPersonaConfigBtn")?.addEventListener("click", () => { setConfigView("persona"); loadPersonaConfig(); });
 $("#openModelParamsBtn")?.addEventListener("click", () => { setConfigView("model-params"); loadModelParamsConfig(); });
+async function loadMemoryConfig(){
+  try{
+    const r = await fetch(`${API_BASE}/app/loop_config`, { headers: authHeaders() });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    if (memoryUrlInput) memoryUrlInput.value = (cfg && cfg.memory_url) || "";
+  }catch{}
+}
+$("#openMemoryConfigBtn")?.addEventListener("click", () => { setConfigView("memory"); loadMemoryConfig(); });
+memorySaveBtn?.addEventListener("click", async () => {
+  const url = memoryUrlInput ? memoryUrlInput.value.trim() : "";
+  const ok = await saveLoopConfig({ memory_url: url }, memoryConfigHint);
+  if (ok) await loadMemoryConfig();
+});
 openInjectConfigBtn?.addEventListener("click", () => { setConfigView("inject"); loadInjectConfig(); });
 openProactiveConfigBtn?.addEventListener("click", () => { setConfigView("proactive"); loadProactiveConfig(); });
 proactiveSaveBtn?.addEventListener("click", async () => {

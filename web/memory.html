@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>记忆仓库 · Memory Vault</title>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/500.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/400-italic.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5/500.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/pinyon-script@5/400.min.css" rel="stylesheet">
+<link rel="preload" href="chat-light.webp" as="image">
+<meta name="theme-color" content="#F7FAFC">
+
+<script>
+  /* Pearl (light) theme — matches the PWA's default preset. */
+  (function(){ document.documentElement.setAttribute("data-theme","light"); })();
+</script>
+
+<style>
+/* ───────── Pearl Tide · light theme (shared with the PWA) ───────── */
+:root{
+  --font-en:"Cormorant Garamond",Georgia,serif;
+  --font-cn:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --font-script:"Pinyon Script","Cormorant Garamond",cursive;
+
+  --bg:#F7FAFC;
+  --wall:url("chat-light.webp");
+  --text:#253447;
+  --text-soft:#5E7080;
+  --text-faint:#8A99A8;
+  --accent:#4C6378;
+  --accent-deep:#2C4056;
+  --hairline:rgba(120,142,165,.24);
+  --card-bg:rgba(248,251,253,.58);
+  --card-line:rgba(150,168,182,.22);
+  --field-bg:rgba(255,255,255,.55);
+  --field-line:rgba(255,255,255,.7);
+  --sheet-bg:rgba(252,253,255,.90);
+  --sheet-line:rgba(255,255,255,.85);
+  --sheet-hi:rgba(255,255,255,.7);
+  --shadow:0 18px 46px rgba(74,93,108,.12);
+  --soft-shadow:0 10px 26px rgba(86,104,118,.10);
+  --scrim:linear-gradient(180deg,rgba(255,255,255,.48),rgba(255,255,255,.16) 32%,rgba(255,255,255,.06) 66%,rgba(255,255,255,.30));
+  --danger:#b06a6f;
+  /* 记忆仓库专用 */
+  --vault-a:#EDF2F6;
+  --vault-b:#D9E2EA;
+  --vault-line:rgba(120,142,165,.35);
+  --stamp:#FFF6D8;
+  --stamp-line:#EADFA9;
+  --stamp-ink:#5A4A26;
+  --stamp-muted:#9A8B5C;
+}
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ margin:0; padding:0; }
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-cn); font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  min-height:100vh; overflow-x:hidden;
+}
+.wall{ position:fixed; inset:0; z-index:-2; background:var(--bg) var(--wall) center/cover no-repeat; }
+.wall::after{ content:""; position:absolute; inset:0; background:var(--scrim); }
+img{ display:block; max-width:100%; }
+button{ font:inherit; color:inherit; cursor:pointer; border:none; background:none; }
+a{ color:inherit; text-decoration:none; }
+.hidden{ display:none !important; }
+
+.glass{ background:var(--field-bg); border:1px solid var(--field-line);
+  box-shadow:var(--soft-shadow), inset 0 1px 0 var(--sheet-hi);
+  -webkit-backdrop-filter:blur(16px) saturate(1.25); backdrop-filter:blur(16px) saturate(1.25); }
+
+/* ───────── 顶栏 ───────── */
+.bar{
+  position:sticky; top:0; z-index:30; display:flex; align-items:flex-start; gap:6px;
+  padding:calc(8px + env(safe-area-inset-top)) clamp(16px,5vw,28px) 4px;
+  background:linear-gradient(180deg,rgba(247,250,252,.82),rgba(247,250,252,0));
+  -webkit-backdrop-filter:blur(12px) saturate(1.15); backdrop-filter:blur(12px) saturate(1.15);
+}
+.bar .icon{ width:36px; height:36px; margin-top:-3px; margin-left:-7px; display:grid; place-items:center; border-radius:50%;
+  color:var(--text); transition:background .2s,transform .15s; }
+.bar .icon:active{ transform:scale(.9); background:var(--hairline); }
+.bar .icon svg{ width:23px; height:23px; }
+.bar .grow{ flex:1; }
+.top-label{ text-align:right; font-family:var(--font-en); font-size:11.5px; font-weight:500;
+  letter-spacing:.32em; line-height:1.4; color:var(--text-faint); padding-right:2px; }
+.top-label .rule{ display:block; width:28px; height:1px; background:var(--hairline); margin:5px 0 0 auto; }
+
+.wrap{ max-width:560px; margin:0 auto; padding:0 clamp(16px,5vw,28px) calc(22px + env(safe-area-inset-bottom)); position:relative; z-index:1; }
+
+/* ───────── Hero ───────── */
+.hero{ text-align:left; padding:2px 0 4px; }
+.hero h1{ font-family:var(--font-script); font-weight:400; color:var(--text);
+  font-size:clamp(31px,9.6vw,43px); line-height:1; margin:0; }
+.hero .sub{ font-family:var(--font-en); font-style:italic; font-size:clamp(13px,3.8vw,16px);
+  color:var(--text-soft); margin-top:0; letter-spacing:.01em; }
+
+/* ───────── 门厅卡片 ───────── */
+.vault{ position:relative; margin:10px 0 14px; border-radius:26px; padding:30px 24px 26px;
+  background:linear-gradient(158deg,var(--vault-a) 0%,var(--vault-b) 62%,#C9D5DE 100%);
+  border:1px solid var(--vault-line);
+  box-shadow:0 24px 54px rgba(60,80,98,.20), inset 0 1.5px 0 rgba(255,255,255,.85), inset 0 -14px 26px rgba(120,140,160,.12);
+  animation:popIn .5s both; text-align:center; }
+.vault .seal{ width:64px; height:64px; margin:0 auto 14px; display:grid; place-items:center; border-radius:50%;
+  background:rgba(255,255,255,.55); border:1px solid var(--vault-line); color:var(--accent-deep); box-shadow:var(--soft-shadow); }
+.vault .seal svg{ width:30px; height:30px; }
+.vault .who{ font-family:var(--font-en); font-style:italic; font-size:13px; letter-spacing:.14em;
+  color:var(--text-faint); text-transform:uppercase; }
+.vault h2{ font-family:var(--font-cn); font-weight:500; font-size:20px; margin:6px 0 10px; color:var(--text); }
+.vault p{ font-family:var(--font-cn); font-size:13.5px; line-height:1.85; color:var(--text-soft); margin:0 auto; max-width:330px; }
+
+/* 跳转大按钮(真链接) */
+.jump{ display:flex; align-items:center; justify-content:center; gap:8px; margin:22px auto 6px; max-width:330px;
+  padding:14px; border-radius:16px; background:var(--accent-deep); color:#fff; box-shadow:var(--soft-shadow);
+  font-family:var(--font-cn); font-size:15px; letter-spacing:.04em; transition:transform .15s; }
+.jump svg{ width:16px; height:16px; color:rgba(255,255,255,.88); }
+.jump:active{ transform:scale(.96); }
+.url-line{ font-family:var(--font-en); font-size:11.5px; letter-spacing:.02em; color:var(--text-faint);
+  text-align:center; margin:8px 0 0; word-break:break-all; }
+
+/* 未配置状态卡 */
+.setup{ margin:10px 0 14px; border-radius:22px; padding:24px 22px; text-align:center; animation:popIn .5s both; }
+.setup .big{ font-size:30px; line-height:1; margin-bottom:8px; }
+.setup h2{ font-family:var(--font-cn); font-weight:500; font-size:17px; margin:0 0 8px; color:var(--text); }
+.setup p{ font-family:var(--font-cn); font-size:13px; line-height:1.8; color:var(--text-soft); margin:0 0 16px; }
+.setup .src{ display:inline-block; margin:0 4px; padding:2px 9px; border-radius:12px;
+  background:rgba(255,255,255,.6); border:1px solid var(--card-line); font-size:12px; color:var(--accent-deep); }
+.home-btn{ display:inline-flex; align-items:center; gap:7px; padding:12px 26px; border-radius:14px;
+  background:var(--accent-deep); color:#fff; font-family:var(--font-cn); font-size:14px; letter-spacing:.03em;
+  box-shadow:var(--soft-shadow); transition:transform .15s; }
+.home-btn:active{ transform:scale(.96); }
+
+/* 未登录卡 */
+.need-login{ margin:10px 0 14px; border-radius:22px; padding:24px 22px; text-align:center; }
+.need-login p{ font-family:var(--font-cn); font-size:13.5px; color:var(--text-soft); margin:0 0 16px; line-height:1.8; }
+
+.hint{ text-align:center; font-family:var(--font-cn); font-size:12px; color:var(--text-faint); margin:6px 0 2px; }
+
+@keyframes popIn{ from{ opacity:0; transform:translateY(10px) scale(.99);} }
+@media (prefers-reduced-motion:reduce){ *{ animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="wall"></div>
+
+<!-- 顶栏 -->
+<div class="bar">
+  <button class="icon" id="topBack" title="返回">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <span class="grow"></span>
+  <div class="top-label" id="topLabel">MEMORY<br>VAULT<span class="rule"></span></div>
+</div>
+
+<div class="wrap" id="mainView">
+  <div class="hero">
+    <h1>Memory Vault</h1>
+    <div class="sub">a door to his long-term memory.</div>
+  </div>
+
+  <!-- 已配置:跳转门厅 -->
+  <div class="vault hidden" id="vaultCard">
+    <div class="seal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.8 5 3.5 7.7 8.5 8.5-5 .8-7.7 3.5-8.5 8.5-.8-5-3.5-7.7-8.5-8.5 5-.8 7.7-3.5 8.5-8.5Z"/></svg>
+    </div>
+    <div class="who">his long-term memory</div>
+    <h2 id="vaultTitle">他的记忆仓库</h2>
+    <p id="vaultText">他的长期记忆在 OB 那边安了家，有自己的脑袋。这里不开门进去看他的底稿，只是帮你轻轻推一扇窗——点下面的门，去他的仓库里逛逛。</p>
+    <a class="jump" id="jumpBtn" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4"/><path d="M14 4h6v6M20 4l-9 9"/></svg>
+      打开他的记忆仓库
+    </a>
+    <div class="url-line" id="urlLine"></div>
+  </div>
+
+  <!-- 未配置 -->
+  <div class="setup glass hidden" id="setupCard">
+    <div class="big">🗝️</div>
+    <h2>这扇门的地址还没填</h2>
+    <p>去主页的设置里，把 OB dashboard 的链接填进<span class="src">设置 → 连接与工具 → 记忆仓库</span>，回来这里就有门了。</p>
+    <button class="home-btn" id="setupHome" type="button">回主页去设置</button>
+  </div>
+
+  <!-- 未登录 -->
+  <div class="need-login glass hidden" id="loginCard">
+    <p>还没读到访问密钥。先在主页登录，再回来推开这扇门。</p>
+    <button class="home-btn" id="loginHome" type="button">去主页</button>
+  </div>
+
+  <div class="hint hidden" id="errLine" style="color:var(--danger)"></div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   Memory Vault — 记忆仓库门厅。
+   只做一件事:从 loop 配置读 memory_url(OB dashboard 公网链接),
+   渲染一扇门,点了跳到那边。不碰记忆的读写。
+   ───────────────────────────────────────────────────────────── */
+const API_BASE="/relay";
+const LS_KEY="companion_secret";
+const secret=localStorage.getItem(LS_KEY)||"";
+
+const $=(id)=>document.getElementById(id);
+function authHeaders(){ return {"Authorization":"Bearer "+secret}; }
+
+function showOnly(id){
+  $("vaultCard").classList.toggle("hidden", id!=="vault");
+  $("setupCard").classList.toggle("hidden", id!=="setup");
+  $("loginCard").classList.toggle("hidden", id!=="login");
+}
+
+async function boot(){
+  if(!secret){ showOnly("login"); return; }
+  try{
+    const r=await fetch(API_BASE+"/app/loop_config",{headers:authHeaders()});
+    if(r.status===401){ showOnly("login"); return; }
+    if(!r.ok){ showOnly("setup"); return; }
+    const cfg=await r.json();
+    const url=(cfg&&cfg.memory_url)||"";
+    if(url){
+      $("jumpBtn").href=url;
+      $("urlLine").textContent=url.replace(/^https?:\/\//,"");
+      showOnly("vault");
+    }else{
+      showOnly("setup");
+    }
+  }catch(e){
+    $("errLine").textContent="读取配置失败："+(e.message||"请检查连接");
+    $("errLine").classList.remove("hidden");
+    showOnly("setup");
+  }
+}
+
+$("topBack").onclick=()=>{ location.assign("index.html"); };
+$("setupHome").onclick=()=>{ location.assign("index.html"); };
+$("loginHome").onclick=()=>{ location.assign("index.html"); };
+
+boot();
+</script>
+</body>
+</html>
