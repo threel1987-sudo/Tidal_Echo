@@ -477,7 +477,10 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
 
     done = bool(body.get("done"))
     chunk = str(body.get("text") or "")
-    meta = {k: v for k, v in body.items() if k not in ("type", "text", "done", "final_text")}
+    # AI 侧检测到「流内重生」(网关在同一条 SSE 流里重新发起一次生成)时会发 reset:
+    # 第一代的残稿必须整体作废,最新一代在原气泡里从头写,否则会出现两段思考/两段正文。
+    reset = (not done) and bool(body.get("reset"))
+    meta = {k: v for k, v in body.items() if k not in ("type", "text", "done", "final_text", "reset")}
     meta["stream_id"] = stream_id
     key = (stream_id, base_kind)
     if key in cancelled_streams:
@@ -490,7 +493,7 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
     if not draft:
         draft = {"text": "", "meta": meta, "ts": now_iso(), "updated_at": now_ts}
         stream_drafts[key] = draft
-    draft["text"] += chunk
+    draft["text"] = "" if reset else draft["text"] + chunk
     if done and isinstance(body.get("final_text"), str):
         draft["text"] = body.get("final_text") or ""
     draft["meta"].update(meta)
@@ -501,6 +504,7 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
             "type": kind,
             "stream_id": stream_id,
             "text": chunk,
+            "reset": reset,
             "done": False,
             "ts": draft["ts"],
             "api_session": draft["meta"].get("api_session") or "",

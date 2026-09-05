@@ -6991,7 +6991,7 @@ function queueStreamDelta(ev){
   const streamId = String(ev.stream_id || "");
   if (!kind || !streamId) return;
   const key = streamMapKey(streamId, kind);
-  if (ev.done){
+  if (ev.done || ev.reset){
     flushStreamDeltas(key);
     applyStreamDelta(ev);
     return;
@@ -7040,6 +7040,15 @@ function applyStreamDelta(ev){
       streamDrafts.delete(mapKey);
     }
     updateStopUi();
+    return;
+  }
+
+  // 流内重生:AI 侧把第一代残稿作废,最新一代在原气泡里从头写——清空文字但保留同一个 key。
+  if (ev.reset){
+    if (existing) {
+      setMessage({ ...existing, text: "", meta: { ...existing.meta, streaming: true } }, { render: false, cache: false });
+      scheduleRender({ stickToBottom: nearBottom() });
+    }
     return;
   }
 

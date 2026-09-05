@@ -1131,6 +1131,21 @@ class _DeltaEmitter:
             except Exception:
                 pass
 
+    async def reset(self) -> None:
+        """流内重生时调用:作废尚未发出的旧代思考缓冲,且不结束流。
+
+        等未完成的定时 flush 真正结束(避免它的旧内容在 reset 之后才落网),
+        再清空 buf;relay/前端的草稿清空由调用方发 reset 信号完成。
+        """
+        if self._timer is not None:
+            t, self._timer = self._timer, None
+            t.cancel()
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+        self.buf = ""
+
 
 async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, on_restart=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """一次 chat/completions 调用(流式消费,只攒正文/思考/工具调用)。
@@ -1828,16 +1843,24 @@ async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *
             await thinking_stream.feed(chunk)
 
     async def _on_stream_restart() -> None:
-        # 同一条 SSE 流里网关重启了生成:收尾旧 thinking 草稿(已落库为独立气泡),
-        # 再开一个新的 emitter 攒最新一代,否则两代思考会粘连成一条 thinking 气泡。
-        nonlocal thinking_stream
-        if thinking_stream is None:
-            return
-        try:
-            await thinking_stream.close(done_frame=True)
-        except Exception:
-            pass
-        thinking_stream = _DeltaEmitter(stream_id, session_id, kind="thinking")
+        # 同一条 SSE 流里网关重启了生成:第一代残稿作废,最新一代在原气泡里从头写。
+        # thinking 与 reply 两条流草稿都发 reset,relay 清空草稿、前端清空气泡文字;
+        # 本地 emitter 只丢未发缓冲、不换实例,所以自始至终只有一条思考流、一个思考块。
+        if thinking_stream is not None:
+            await thinking_stream.reset()
+        if STREAM_OUTPUT:
+            for kind in ("thinking", "reply"):
+                try:
+                    await relay_out({
+                        "type": f"{kind}_delta",
+                        "stream_id": stream_id,
+                        "text": "",
+                        "reset": True,
+                        "done": False,
+                        "api_session": session_id,
+                    })
+                except Exception:
+                    pass
 
     cancelled = False
     try:
