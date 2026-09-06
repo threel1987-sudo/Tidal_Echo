@@ -63,6 +63,31 @@
 </script>
 
 <script>
+  /* 自定义外观（壁纸 + CSS）预注入：首屏即生效，避免换壁纸/贴 CSS 后刷新出现闪烁。
+     真正的运行时逻辑在文件底部的「自定义外观」区块，这里只做无闪烁的提前应用。 */
+  (function(){
+    try{
+      var w = localStorage.getItem("companion_wall_custom");
+      if (w){
+        document.documentElement.style.setProperty("--wall-default", 'url("' + w + '")');
+        document.documentElement.style.setProperty("--menu-wall-default", 'url("' + w + '")');
+      }
+    }catch(e){}
+  })();
+  (function(){
+    try{
+      var css = localStorage.getItem("companion_user_css");
+      if (css){
+        var s = document.createElement("style");
+        s.id = "userCssStyle";
+        s.textContent = css;
+        document.head.appendChild(s);
+      }
+    }catch(e){}
+  })();
+</script>
+
+<script>
   /* Auth pre-restore: if a key is already saved, mark <html authed> before first paint,
      so a reload (e.g. returning from fridge/memory pages) goes straight into the app shell
      instead of flashing the login screen. handle401() removes the class to re-show login. */
@@ -1350,6 +1375,26 @@
     box-shadow: var(--seg-thumb-shadow); font-weight:500;
   }
 
+  /* wall picker（设置页换壁纸 + 自定义上传） */
+  .wall-picker{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .wall-thumb{ display:flex; flex-direction:column; gap:7px; align-items:center; background:none; border:0; padding:0; cursor:pointer; }
+  .wall-thumb-img{
+    width:100%; aspect-ratio:9/19; border-radius:12px;
+    background-size:cover; background-position:center;
+    background-color: var(--seg-track);
+    border:2px solid var(--card-line);
+    box-shadow: var(--soft-shadow);
+    box-sizing:border-box;
+  }
+  .wall-thumb.active .wall-thumb-img{ border-color: var(--accent); box-shadow:0 0 0 2px var(--accent); }
+  .wall-thumb-label{ font-size:11px; color:var(--text-soft); }
+  .wall-thumb.active .wall-thumb-label{ color:var(--text); font-weight:500; }
+  .wall-thumb-add-plus{ display:grid; place-items:center; font-size:26px; color:var(--text-faint); border-style:dashed; border-color:var(--field-line); }
+  .wall-thumb-reset{ display:grid; place-items:center; font-size:22px; color:var(--text-soft); }
+  .wall-quality-row{ display:flex; align-items:center; gap:12px; margin-top:11px; }
+  .wall-quality-row .segmented{ flex:1; }
+  .wall-quality-row .param-unit{ white-space:nowrap; }
+
   /* param sliders（模型参数控制条） */
   .param-slider-row{
     display:flex; align-items:center; gap:12px;
@@ -2536,6 +2581,44 @@
         </div>
       </section>
 
+      <!-- 壁纸 -->
+      <section class="settings-card">
+        <div class="settings-label">壁纸 <i class="info-i" title="更换聊天背景。预设壁纸原图加载；自定义上传会在本机压缩后保存，只存在这台设备">i</i></div>
+        <div class="wall-picker" id="wallPicker">
+          <button type="button" class="wall-thumb" data-wall="beach.webp" aria-label="默认潮汐壁纸">
+            <span class="wall-thumb-img" style="background-image:url('beach.webp')"></span>
+            <span class="wall-thumb-label">潮汐</span>
+          </button>
+          <button type="button" class="wall-thumb wall-thumb-add" id="wallUploadBtn" aria-label="上传自定义壁纸">
+            <span class="wall-thumb-img wall-thumb-add-plus">＋</span>
+            <span class="wall-thumb-label">上传</span>
+          </button>
+          <button type="button" class="wall-thumb" data-wall="" id="wallResetThumb" aria-label="恢复默认壁纸">
+            <span class="wall-thumb-img wall-thumb-reset">↺</span>
+            <span class="wall-thumb-label">默认</span>
+          </button>
+        </div>
+        <div class="wall-quality-row">
+          <span class="param-unit">上传画质</span>
+          <div class="segmented" id="wallQualitySeg" role="group" aria-label="壁纸压缩质量">
+            <button type="button" data-val="hd" class="active">高清</button>
+            <button type="button" data-val="lite">省空间</button>
+          </div>
+        </div>
+        <input type="file" id="wallInput" accept="image/*" class="hidden">
+      </section>
+
+      <!-- 自定义样式 -->
+      <section class="settings-card">
+        <div class="settings-label">自定义样式 CSS <i class="info-i" title="把 CSS 贴进来，实时覆盖默认外观，只存在这台设备。点「清空」即回到默认">i</i></div>
+        <textarea id="userCssInput" class="config-textarea" rows="6" placeholder="例如：&#10;.bubble-ai { border-radius: 22px; }&#10;.menu-title { font-size: 20px; }" autocomplete="off" spellcheck="false"></textarea>
+        <div class="config-actions">
+          <button class="config-action primary" id="userCssApplyBtn" type="button">应用样式</button>
+          <button class="config-action danger" id="userCssClearBtn" type="button">清空</button>
+        </div>
+        <div class="push-hint" id="userCssHint"></div>
+      </section>
+
       <!-- 字体大小 -->
       <section class="settings-card">
         <div class="settings-label">字体大小 <i class="info-i" title="调节聊天气泡文字的显示大小，只影响这台设备">i</i></div>
@@ -3014,7 +3097,7 @@ const CONFIG = {
 const AI_NAME = CONFIG.AI_NAME, HUMAN_NAME = CONFIG.HUMAN_NAME, APP_NAME = CONFIG.APP_NAME;
 
 const API_BASE = "/relay";       // same-origin; nginx mounts the relay here (RELAY_PUBLIC_PREFIX)
-const USE_MOCK  = false;           // true = self-contained demo with fake data (no backend needed)
+const USE_MOCK  = true;            // true = self-contained demo with fake data (no backend needed)
 const LS_KEY    = "companion_secret";
 
 /* ── 状态 ── */
@@ -3086,6 +3169,9 @@ let editingMcpIndex = null;
 /* ════════ 固定聊天背景 + 本地头像 ════════ */
 const THEMES = ["tide"];
 const WALLS = { tide: "beach.webp" };
+const WALL_CUSTOM_KEY = "companion_wall_custom";
+const WALL_QUALITY_KEY = "companion_wall_quality";
+const USER_CSS_KEY = "companion_user_css";
 const AVATAR_KEY = "companion_avatar";
 const REMARK_KEY = "companion_profile_remark";
 const SESSION_PICK_KEY = "companion_api_session_pick";
@@ -3098,7 +3184,12 @@ function currentTheme(){
   const t = document.documentElement.getAttribute("data-theme");
   return THEMES.indexOf(t) >= 0 ? t : "tide";
 }
-function currentWall(){ return WALLS[currentTheme()] || WALLS.tide; }
+function currentWall(){
+  let c = null;
+  try{ c = localStorage.getItem(WALL_CUSTOM_KEY); }catch(e){}
+  if (c) return c;
+  return WALLS[currentTheme()] || WALLS.tide;
+}
 
 function setThemeColor(color){
   var meta = document.querySelector('meta[name="theme-color"]');
@@ -3118,6 +3209,9 @@ function scrimBlend(rgb, alpha){
 }
 function applyWall(url){
   const image = `url("${url}")`;
+  // 同步 CSS 变量，让所有引用 var(--wall-default) 的面板（菜单/房间/Profile）随壁纸统一切换
+  document.documentElement.style.setProperty("--wall-default", image);
+  document.documentElement.style.setProperty("--menu-wall-default", image);
   wallEl.style.backgroundImage = image;
 
   // The header inside the app shows the wallpaper UNDER the white scrim, but the
@@ -3302,6 +3396,129 @@ syncThemeSeg();
 if (themeSeg) themeSeg.addEventListener("click", e => {
   const btn = e.target.closest("button[data-val]");
   if (btn) setTheme(btn.dataset.val);
+});
+
+/* ════════ 自定义外观（壁纸 + CSS）· 精简本地版 ════════
+   数据只存在这台设备（localStorage），不上服务器、不跨设备同步。 */
+const wallPicker = $("#wallPicker");
+const wallInput = $("#wallInput");
+const wallUploadBtn = $("#wallUploadBtn");
+const wallQualitySeg = $("#wallQualitySeg");
+const userCssInput = $("#userCssInput");
+const userCssApplyBtn = $("#userCssApplyBtn");
+const userCssClearBtn = $("#userCssClearBtn");
+const userCssHint = $("#userCssHint");
+
+function applyUserCss(css){
+  let el = document.getElementById("userCssStyle");
+  if (css){
+    if (!el){ el = document.createElement("style"); el.id = "userCssStyle"; document.head.appendChild(el); }
+    el.textContent = css;
+  } else if (el){
+    el.remove();
+  }
+}
+function currentWallQuality(){
+  let q = null;
+  try{ q = localStorage.getItem(WALL_QUALITY_KEY); }catch(e){}
+  return (q === "hd" || q === "lite") ? q : "hd";
+}
+function syncWallQualitySeg(){
+  if (!wallQualitySeg) return;
+  const cur = currentWallQuality();
+  wallQualitySeg.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.val === cur));
+}
+function syncWallPicker(){
+  if (!wallPicker) return;
+  let hasCustom = null;
+  try{ hasCustom = localStorage.getItem(WALL_CUSTOM_KEY); }catch(e){}
+  wallPicker.querySelectorAll(".wall-thumb").forEach(t => {
+    t.classList.toggle("active",
+      (t.id === "wallUploadBtn" && hasCustom) ||        // 当前是自定义图 → 高亮「上传」
+      (t.dataset.wall === "beach.webp" && !hasCustom)); // 没有自定义 → 高亮预设「潮汐」
+  });
+}
+/* 用 canvas 把上传图压到手机够用的分辨率 + 高质量 JPEG，减少 localStorage 占用 */
+function compressWallImage(file, cb){
+  const reader = new FileReader();
+  reader.onerror = function(){ cb(null); };
+  reader.onload = function(){
+    const img = new Image();
+    img.onerror = function(){ cb(null); };
+    img.onload = function(){
+      try{
+        const hd = currentWallQuality() === "hd";
+        const maxW = hd ? 1440 : 960;
+        const scale = Math.min(1, maxW / img.width);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        cb(c.toDataURL("image/jpeg", hd ? 0.9 : 0.72));
+      }catch(e){ cb(null); }
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function setCustomWall(dataUrl){
+  try{ localStorage.setItem(WALL_CUSTOM_KEY, dataUrl); }
+  catch(e){ showToast("壁纸太大，保存失败，换小一点的图或选「省空间」"); return; }
+  applyWall(dataUrl);
+  syncWallPicker();
+  showToast("壁纸已更换");
+}
+function resetCustomWall(){
+  try{ localStorage.removeItem(WALL_CUSTOM_KEY); }catch(e){}
+  applyWall(WALLS[currentTheme()] || WALLS.tide);
+  syncWallPicker();
+}
+
+/* 初始化：填充 CSS 框、回显壁纸/画质选中态 */
+if (userCssInput) userCssInput.value = (function(){ try{ return localStorage.getItem(USER_CSS_KEY) || ""; }catch(e){ return ""; } })();
+syncWallQualitySeg();
+syncWallPicker();
+
+if (wallUploadBtn) wallUploadBtn.addEventListener("click", () => wallInput && wallInput.click());
+if (wallPicker) wallPicker.addEventListener("click", e => {
+  const t = e.target.closest(".wall-thumb");
+  if (!t || t === wallUploadBtn) return;               // 上传按钮走上面的监听
+  resetCustomWall();
+  showToast("已恢复默认壁纸");
+});
+if (wallInput) wallInput.addEventListener("change", () => {
+  const f = wallInput.files && wallInput.files[0];
+  if (!f) return;
+  compressWallImage(f, (url) => {
+    wallInput.value = "";
+    if (url) setCustomWall(url);
+    else showToast("图片读取失败，换一张试试");
+  });
+});
+if (wallQualitySeg) wallQualitySeg.addEventListener("click", e => {
+  const b = e.target.closest("button[data-val]");
+  if (!b) return;
+  try{ localStorage.setItem(WALL_QUALITY_KEY, b.dataset.val); }catch(e){}
+  syncWallQualitySeg();
+});
+if (userCssApplyBtn) userCssApplyBtn.addEventListener("click", () => {
+  const css = (userCssInput ? userCssInput.value : "").trim();
+  try{
+    if (css) localStorage.setItem(USER_CSS_KEY, css);
+    else localStorage.removeItem(USER_CSS_KEY);
+  }catch(e){}
+  applyUserCss(css);
+  if (userCssHint) userCssHint.textContent = "已应用，刷新后依然生效";
+  showToast("样式已应用");
+});
+if (userCssClearBtn) userCssClearBtn.addEventListener("click", () => {
+  if (userCssInput) userCssInput.value = "";
+  try{ localStorage.removeItem(USER_CSS_KEY); }catch(e){}
+  applyUserCss("");
+  if (userCssHint) userCssHint.textContent = "";
+  showToast("已清空，恢复默认外观");
 });
 
 /* 本地预览便捷:仅 localhost 下,带 #preview-menu 直接亮出 hub 菜单(线上域名不生效,安全) */
