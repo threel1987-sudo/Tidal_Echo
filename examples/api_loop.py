@@ -74,6 +74,17 @@ load_dotenv(HERE / ".env")
 
 LOOP_PORT = int(os.environ.get("LOOP_PORT", "3020"))
 LOOP_CONFIG = Path(os.environ.get("LOOP_CONFIG", str(HERE / "api_loop.config.json")))
+# 启动即打印配置落盘路径与房间数,方便排查「重新部署后房间布局丢失」:
+# 若路径不是 /data/api_loop.config.json,说明环境变量没生效,配置会被写回容器临时目录而丢失;
+# rooms=N 一目了然地看出房间布局在这次启动时是否还留在持久卷上。
+_startup_rooms = 0
+try:
+    startup_cfg = json.loads(LOOP_CONFIG.read_text(encoding="utf-8")) if LOOP_CONFIG.exists() else {}
+    if isinstance(startup_cfg, dict) and isinstance(startup_cfg.get("rooms"), dict):
+        _startup_rooms = len(startup_cfg["rooms"])
+except Exception:
+    pass
+print(f"[api_loop:config] LOOP_CONFIG={LOOP_CONFIG} exists={LOOP_CONFIG.exists()} rooms={_startup_rooms}", flush=True)
 RELAY_DB = os.environ.get("RELAY_DB", str(HERE.parent / "backend" / "relay.db"))
 RELAY_URL = os.environ.get("RELAY_URL", "http://127.0.0.1:3011").rstrip("/")
 RELAY_SECRET = os.environ.get("RELAY_SECRET", "")
