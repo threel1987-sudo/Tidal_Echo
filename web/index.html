@@ -2427,6 +2427,10 @@
         <span class="presence-emoji">📱</span>
         <span class="presence-slot-copy"><strong>我出门了</strong><small>他一个人在家，你俩手机聊天</small></span>
       </button>
+      <button type="button" value="ai_away" class="presence-slot">
+        <span class="presence-emoji">🎒</span>
+        <span class="presence-slot-copy"><strong>他出门了</strong><small>他短时出门办点事，很快回来，你俩手机聊天</small></span>
+      </button>
       <button type="button" value="together_out" class="presence-slot">
         <span class="presence-emoji">🚶</span>
         <span class="presence-slot-copy"><strong>一起出门</strong><small>两个人都在外面</small></span>
@@ -2767,10 +2771,11 @@
     <div class="room-scroll">
       <section class="settings-card" id="roomConfigView">
         <div class="config-fields">
-          <div class="config-field-label">当前场景 <i class="info-i" title="决定他此刻的说话方式。在家：两个人在场，可以写肢体互动和家具；我出门了：你俩隔着手机聊天，他回复短消息风格；一起出门：描写外面环境。人格不受影响。">i</i></div>
+          <div class="config-field-label">当前场景 <i class="info-i" title="决定他此刻的说话方式：在家（一起）写肢体和家具；我出门或他出门时，你俩隔着手机、短消息风格；一起出门写外面环境。人格不受影响。">i</i></div>
           <div class="segmented" id="scenarioSeg" role="group" aria-label="场景切换">
             <button type="button" value="together_at_home">🏠 在家（一起）</button>
             <button type="button" value="away">📱 我出门了</button>
+            <button type="button" value="ai_away">🎒 他出门了</button>
             <button type="button" value="together_out">🚶 一起出门</button>
           </div>
           <div class="config-field-label" id="roomSectionLabel">房间描述（在家时，告诉他你在哪个房间、周围有什么） <i class="info-i" title="每个房间一行：名字 + 环境描述。切换房间在聊天页顶部的小胶囊里点一下就行。这里只负责描写空间，不写人格指令。">i</i></div>
@@ -4752,6 +4757,7 @@ injectSaveBtn?.addEventListener("click", async () => {
 const SCENARIO_META = {
   together_at_home: { emoji: "🏠", full: "在家（一起）", capsule: "🏠 在家" },
   away: { emoji: "📱", full: "我出门了", capsule: "📱 我出门了" },
+  ai_away: { emoji: "🎒", full: "他出门了", capsule: "🎒 他出门了" },
   together_out: { emoji: "🚶", full: "一起出门", capsule: "🚶 一起出门" },
 };
 function presenceMeta(id){ return SCENARIO_META[id] || SCENARIO_META.together_at_home; }

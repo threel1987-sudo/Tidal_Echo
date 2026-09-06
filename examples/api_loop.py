@@ -388,10 +388,10 @@ def injections() -> tuple[bool, list[dict[str, str]]]:
 # 人格永远来自 persona(system prompt),全局唯一,不随房间/场景变化。
 
 PRESENCE_DEFAULTS: dict[str, Any] = {
-    "scenario": "together_at_home",  # together_at_home | away | together_out
+    "scenario": "together_at_home",  # together_at_home | away | ai_away | together_out
     "room": "",                      # 当前房间名(仅 together_at_home 生效),空 = 未指定
 }
-SCENARIO_IDS: tuple[str, ...] = ("together_at_home", "away", "together_out")
+SCENARIO_IDS: tuple[str, ...] = ("together_at_home", "away", "ai_away", "together_out")
 
 
 def presence() -> dict[str, Any]:
@@ -412,18 +412,31 @@ def rooms() -> dict[str, str]:
 
 
 def spatial_block() -> str:
-    """按当前场景生成【空间】【叙事】两段,追加进 system 提示。
+    """按当前场景生成【家的布局】【空间】【叙事】等段,追加进 system 提示。
 
-    三个场景:
-    - together_at_home: 两人在家共处,可写肢体互动 + 房间家具;
-    - away: 用户出门,AI 独自在家,隔着手机聊天 → 短消息风格,不写肢体互动;
-    - together_out: 两人一起出门,可写外部环境 + 同行互动,不写家里的摆设。
+    四个场景:
+    - together_at_home: 两人都在家,可写肢体互动 + 房间家具;
+    - away: 用户出门、你独自在家 → 远距短消息,不写肢体互动;
+    - ai_away: 你短时出门办点事、用户在家 → 轻快短聊,分享你在外的所见所得;
+    - together_out: 两人一起出门 → 写外部环境 + 同行互动,不写家里摆设。
     """
     p = presence()
     scenario = p["scenario"] if p["scenario"] in SCENARIO_IDS else "together_at_home"
     room = str(p["room"] or "").strip()
-    room_desc = rooms().get(room, "")
+    all_rooms = rooms()
+    room_desc = all_rooms.get(room, "")
     guard = "以上只是空间与环境信息,不改变你的人格和说话方式。"
+
+    # 【家的布局】是稳定段:只要「你在家」(不管用户是否同在家)就认得整个家的结构,
+    # 不因切到某个房间、或换新窗口没历史就忘了别的房间;放在【空间】(动态段)之前,
+    # 模型 API 的前缀缓存可复用,不浪费 token。
+    layout = ""
+    if all_rooms:
+        lines = [f"- {name}：{desc}" for name, desc in all_rooms.items()]
+        layout = (
+            "【家的布局】这是你们家完整的房间结构,你长期记得、不会因为切换房间就忘记;"
+            "每个房间在哪、有什么都清楚:\n" + "\n".join(lines)
+        )
 
     if scenario == "away":
         spatial = "【空间】现在用户出门在外,你一个人留在家里,两人通过手机文字聊天。"
@@ -435,7 +448,16 @@ def spatial_block() -> str:
             "反过来,用户也可能临出门时给你贴了纸条:她贴新的纸条时你会在聊天里收到提醒,"
             "想确认冰箱门上现在有什么,随时用 home_state_fridge 查,有留给你的就放在心上、回应她。"
         )
-        return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
+        return "\n".join(p for p in (layout, spatial, narrative, fridge, guard) if p)
+
+    if scenario == "ai_away":
+        spatial = "【空间】现在你短时间出趟门办点事,人就在附近,很快回家,两人通过手机文字聊天。"
+        narrative = "【叙事】这是隔着手机的轻快短聊:你在外面,可以把路上看到的、此刻的心情随手分享给她(比如路边的花、树、天光),语气像随手拍随手发;但不描写家里才有的家具陈设,也不描写牵手、靠近等此刻做不到的肢体互动。"
+        fridge = (
+            "【冰箱门】你只是短时间出门、很快回来,冰箱门纸条这会儿用不上——"
+            "不用你贴,也不用她留,人马上就见面了。"
+        )
+        return "\n".join(p for p in (spatial, narrative, fridge, guard) if p)
 
     if scenario == "together_out":
         spatial = "【空间】现在你和用户一起出门在外。"
@@ -447,6 +469,7 @@ def spatial_block() -> str:
         return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
 
     # together_at_home
+    # 【家的布局】见上方稳定段;这里再单独标当前房间。
     if room and room_desc:
         spatial = f"【空间】现在你和用户一起待在家里,当前在「{room}」。{room_desc}"
     elif room:
@@ -455,11 +478,11 @@ def spatial_block() -> str:
         spatial = "【空间】现在你和用户一起待在家里。"
     narrative = "【叙事】你们真实共处一室:可以自然描写肢体动作、距离、触碰以及房间里的家具物品,动作与对话融为一体。"
     fridge = (
-        "【冰箱门】都到家了:如果冰箱门上有之前谁留的纸条,此刻正是读一次的时候——"
-        "先查一下冰箱门(可用 home_state_fridge 工具),有用户留给你的就念给他听,读完用 home_state_fridge_read 标记,"
-        "不要下一轮又当新纸条再念一遍;你留的纸条他打开冰箱门自己会看到。"
+        "【冰箱门】都到家了。冰箱门上若还贴着之前谁留的纸条:用户贴新的纸条时你会在聊天里收到提醒,"
+        "收到提醒后再用 home_state_fridge 看一眼、自然回应她,读完用 home_state_fridge_read 标成已读;"
+        "没有提醒就别主动去翻,同样的纸条别当成每轮都有的新东西重复念。你留的纸条她打开冰箱门自己会看到。"
     )
-    return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
+    return "\n".join(p for p in (layout, spatial, narrative, fridge, guard) if p)
 
 def temperature() -> float:
     try:
