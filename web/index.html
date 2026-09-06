@@ -4,7 +4,7 @@
 <!-- ════════════════════════════════════════════════════════════════
   区块目录（要修改某功能时按区块名搜索即可定位）：
   CSS 样式区：/* ── XXX ── */ 横幅
-    主题变量 PEARL TIDE · HARBOR 海港主题 · Header · Messages
+    主题变量 TIDAL ECHO · 潮汐回响(深色海岸玻璃拟态) · Header · Messages
     meta card(思考/工具卡) · thinking · act · Composer · Login
     Profile 设置页 · API 列表 · Menu 主页 · Voice call · 长按菜单
     多选消息 · 编辑消息 · reaction
@@ -35,15 +35,15 @@
 
 <!-- PWA / iOS -->
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="preload" href="chat-light.webp" as="image" fetchpriority="high">
+<link rel="preload" href="beach.webp" as="image" fetchpriority="high">
 <link rel="preload" href="avatar-sea.png" as="image">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/400.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond@5/500.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5/400.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5/500.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/@fontsource/pinyon-script@5/400.min.css" rel="stylesheet">
-<meta name="theme-color" content="#F4F4F5">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/500.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/600.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/500.min.css" rel="stylesheet">
+<meta name="theme-color" content="#050D14">
 <!-- iOS launch mode is manifest-only; legacy Apple fullscreen meta breaks bottom viewport. -->
 
 <meta name="apple-mobile-web-app-title" content="Tidal Echo">
@@ -51,14 +51,14 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 
 <script>
-  /* Theme: two presets (light=Pearl / harbor). Persisted in localStorage companion_theme. Set data-theme early to avoid a first-paint flash. */
+  /* Theme: single preset (tide = Tidal Echo dark glassmorphism). Persisted in localStorage companion_theme. */
   (function(){
-    var THEMES = ["light","harbor"];
+    var THEMES = ["tide"];
     try{
       var t = localStorage.getItem("companion_theme");
-      if (THEMES.indexOf(t) < 0) t = "light";
+      if (THEMES.indexOf(t) < 0) t = "tide";
       document.documentElement.setAttribute("data-theme", t);
-    }catch(e){ document.documentElement.setAttribute("data-theme", "light"); }
+    }catch(e){ document.documentElement.setAttribute("data-theme", "tide"); }
   })();
 </script>
 
@@ -78,42 +78,42 @@
     --ios-pwa-bottom-bleed: 0px;
     --ref-width: 941px;
     --ref-height: 1672px;
-    --font-en: "Cormorant Garamond", Georgia, serif;
-    --font-cn: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+    --font-en: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-cn: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
     --fs-scale: 1;  /* 聊天字号缩放，设置页可调 */
-    --wall-light: url("chat-light.webp");
-    --wall-harbor: url("chat-harbor.webp");
+    --wall-light: url("beach.webp");
+    --wall-harbor: url("beach.webp");
     --wall-default: var(--wall-light);
-    --menu-wall-light: url("menu-light.webp");
-    --menu-wall-harbor: url("menu-harbor.webp");
+    --menu-wall-light: url("beach.webp");
+    --menu-wall-harbor: url("beach.webp");
     --menu-wall-default: var(--menu-wall-light);
     --avatar-default: url("avatar-sea.png");
-    /* ── PEARL TIDE · 珍珠潮汐(default) ── */
-    --bg: #F7FAFC;
-    --header-bg: #F7FAFC;
-    --hairline: rgba(120,142,165,.24);
-    --text: #253447;
-    --text-soft: #5E7080;
-    --text-faint: #8A99A8;
-    --bubble-ai-bg: #ECEEF3;
-    --bubble-ai-fg: #253447;
-    --bubble-ai-line: transparent;
-    --bubble-human-bg: #DFE5EE;
-    --bubble-human-fg: #253447;
+    /* ── TIDAL ECHO · 潮汐回响(深色海岸玻璃拟态) ── */
+    --bg: #050D14;
+    --header-bg: rgba(5,13,20,.00);
+    --hairline: rgba(255,255,255,.10);
+    --text: #F2F0EE;
+    --text-soft: #B8B8C0;
+    --text-faint: #808088;
+    --bubble-ai-bg: rgba(255,255,255,.14);
+    --bubble-ai-fg: #F2F0EE;
+    --bubble-ai-line: rgba(255,255,255,.08);
+    --bubble-human-bg: rgba(168,204,224,.26);
+    --bubble-human-fg: #F2F0EE;
     --bubble-human-line: transparent;
-    --accent: #4C6378;
-    --send-bg: #2C4056;
-    --tick: #7E93A4;
-    --accent-fg: #ffffff;
-    --think-flourish: rgba(99, 121, 142, 0.52);
-    --think-label: #6A7E8E;
-    --think-body: #56697A;
-    --composer-bg: #EEF4FA;
-    --field-bg: rgba(247,250,252,.92);
-    --field-line: rgba(151,169,181,.18);
-    --shadow: 0 18px 46px rgba(74, 93, 108, 0.10);
-    --soft-shadow: 0 14px 34px rgba(86, 104, 118, 0.08);
-    --scrim: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.04) 68%, rgba(255,255,255,0.22));
+    --accent: #A8CCE0;
+    --send-bg: #A8CCE0;
+    --tick: #8EB8D0;
+    --accent-fg: #0A1620;
+    --think-flourish: rgba(168,204,224,.45);
+    --think-label: #A8CCE0;
+    --think-body: #B8B8C0;
+    --composer-bg: rgba(255,255,255,.12);
+    --field-bg: rgba(255,255,255,.12);
+    --field-line: rgba(255,255,255,.12);
+    --shadow: 0 18px 46px rgba(0,0,0,.28);
+    --soft-shadow: 0 14px 34px rgba(0,0,0,.20);
+    --scrim: linear-gradient(180deg, rgba(5,13,20,.55) 0%, rgba(5,13,20,.28) 30%, rgba(5,13,20,.28) 68%, rgba(5,13,20,.55) 100%);
     --header-h: clamp(56px, 10vw, 120px);
     --side-pad: clamp(16px, 4vw, 40px);
     --avatar-size: clamp(32px, 5vw, 48px);
@@ -127,53 +127,27 @@
     --edge-fade-top: clamp(24px, 5vw, 52px);
     --edge-fade-tail: clamp(16px, 3vw, 30px);
     /* profile / settings — frosted glass, blends into the wallpaper */
-    --card-bg: rgba(244,248,250,.42);
-    --card-line: rgba(150,168,182,.12);
-    --card-shadow: 0 10px 28px rgba(70,92,108,.05);
-    --seg-track: rgba(140,160,176,.11);
-    --seg-thumb: rgba(255,255,255,.68);
-    --seg-thumb-shadow: 0 2px 8px rgba(40,60,78,.08);
-    --row-press: rgba(140,160,176,.09);
-    --slider-track: rgba(143,162,176,.28);
-    --slider-thumb: #44627b;
-    --info-ring: rgba(143,162,176,.38);
-    --status-dot: #5fbf8f;
+    --card-bg: rgba(255,255,255,.14);
+    --card-line: rgba(255,255,255,.12);
+    --card-shadow: 0 10px 28px rgba(0,0,0,.25);
+    --seg-track: rgba(255,255,255,.10);
+    --seg-thumb: rgba(168,204,224,.30);
+    --seg-thumb-shadow: 0 2px 8px rgba(0,0,0,.25);
+    --row-press: rgba(255,255,255,.08);
+    --slider-track: rgba(255,255,255,.16);
+    --slider-thumb: #A8CCE0;
+    --info-ring: rgba(168,204,224,.38);
+    --status-dot: #A8D8C0;
     /* voice call (speaking overlay) */
-    --call-glass-top: rgba(255,255,255,.46);
-    --call-glass-bot: rgba(255,255,255,.20);
-    --call-glass-edge: rgba(255,255,255,.58);
-    --call-glass-hi: rgba(255,255,255,.72);
-    --call-glass-glow: rgba(150,172,196,.20);
-    --call-glass-shadow: 0 20px 50px rgba(74,93,108,.16);
-    --call-scrim: rgba(64,82,102,.06);
-    --call-hangup-bg: #cf8d92;
-    --call-hangup-shadow: rgba(176,96,104,.34);
-  }
-  /* ── HARBOR · 海港(通用开源主题 / Tidal Echo) ── 中性冷调,供 fork 使用;只覆盖带色相变量,其余继承 PEARL TIDE */
-  :root[data-theme="harbor"]{
-      --wall-default: var(--wall-harbor);
-      --menu-wall-default: var(--menu-wall-harbor);
-      --bg: #F4F2EF;
-      --header-bg: #F4F2EF;
-      --hairline: rgba(74,93,108,.20);
-      --text: #36404B;
-      --text-soft: #5E6B78;
-      --text-faint: #9197A0;
-      --bubble-ai-bg: #EAE6E4;
-      --bubble-ai-fg: #36404B;
-      --bubble-human-bg: #E1E0E3;
-      --bubble-human-fg: #36404B;
-      --accent: #4A5D6C;
-      --send-bg: #4A5D6C;
-      --tick: #7E8E9C;
-      --accent-fg: #ffffff;
-      --think-flourish: rgba(74, 93, 108, 0.48);
-      --think-label: #5E6B78;
-      --think-body: #4F5D6A;
-      --composer-bg: #EFEBE8;
-      --field-bg: rgba(244,242,239,.92);
-      --slider-thumb: #4A5D6C;
-      --status-dot: #6FA98C;
+    --call-glass-top: rgba(255,255,255,.18);
+    --call-glass-bot: rgba(255,255,255,.08);
+    --call-glass-edge: rgba(255,255,255,.24);
+    --call-glass-hi: rgba(255,255,255,.30);
+    --call-glass-glow: rgba(168,204,224,.22);
+    --call-glass-shadow: 0 20px 50px rgba(0,0,0,.30);
+    --call-scrim: rgba(5,13,20,.55);
+    --call-hangup-bg: #E0A8A8;
+    --call-hangup-shadow: rgba(224,168,168,.30);
   }
 
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -241,12 +215,12 @@
     text-align:center;
   }
   .peerpill .name{
-    font-family: "Songti SC", "Noto Serif SC", "STSong", "SimSun", serif;
+    font-family: var(--font-en), var(--font-cn);
     font-size: clamp(18px, 3vw, 28px);
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text);
     letter-spacing: 0;
-    text-shadow: 0 1px 18px rgba(255,255,255,0.3);
+    text-shadow: 0 1px 18px rgba(0,0,0,0.3);
     /* iOS 上 flex item 会被 block 化,overflow:hidden + 1.15 行高会把宋体字上半裁掉;
        改为不裁字 + 宽松行高,超长名交给 peerpill 的 max-width 兜底 */
     line-height: 1.35;
@@ -906,7 +880,7 @@
   }
   .act-label{
     color: var(--think-label);
-    font-family: var(--font-cn);                /* 统一宋体:--font-en 末尾的通用 serif 会先吃掉 CJK→iOS 回退黑体 */
+    font-family: var(--font-cn);                /* 统一无衬线体:中文文案走 --font-cn 黑体栈 */
     font-size: clamp(12px, 1.32vw, 13.5px);
     line-height: 1.46;
     letter-spacing: .02em;
@@ -1043,36 +1017,57 @@
   .login{
     position: fixed; inset:0; z-index: 50;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap: 22px; padding: 28px;
+    padding: 28px;
     padding-top: calc(28px + env(safe-area-inset-top));
     background-color: var(--bg);
     background-image: var(--wall-default);
     background-size: cover;
     background-position: center;
   }
+  .login::before{
+    content:""; position:absolute; inset:0; background: var(--scrim); pointer-events:none;
+  }
+  .login-card{
+    position: relative; z-index: 1;
+    display:flex; flex-direction:column; align-items:center; gap: 14px;
+    width:100%; max-width: 360px;
+    padding: 40px 28px 32px;
+    border-radius: 20px;
+    background: var(--bubble-ai-bg);
+    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--shadow);
+  }
+  .login-brand{
+    margin:0; font-family: var(--font-en), var(--font-cn);
+    font-size: 11px; font-weight:600; letter-spacing:.32em; text-transform:uppercase;
+    color: var(--accent);
+  }
   .login .orb{
     width:72px; height:72px; border-radius:50%;
     background-image: var(--avatar-default);
     background-size: cover;
-    box-shadow: 0 20px 42px rgba(24,46,67,0.2);
+    box-shadow: 0 20px 42px rgba(0,0,0,.35), 0 0 0 1px var(--hairline);
     animation: breathe 4.5s ease-in-out infinite;
   }
-  .login h1{ margin:0; font-size:34px; font-weight:500; letter-spacing:0; }
-  .login .sub{ margin:-12px 0 0; color: var(--text-soft); font-size:16px; text-align:center; }
+  .login h1{ margin:0; font-family: var(--font-en), var(--font-cn); font-size:30px; font-weight:600; letter-spacing:0; color: var(--text); }
+  .login .sub{ margin:-8px 0 6px; color: var(--text-soft); font-size:14px; text-align:center; line-height:1.5; }
   .login form{ display:flex; flex-direction:column; gap:11px; width:100%; max-width:320px; }
+  .login .login-label{ font-size:12px; font-weight:500; color: var(--text-soft); letter-spacing:.02em; }
   .login input{
-    width:100%; padding: 14px 16px; font: inherit; color: var(--text);
-    background: var(--field-bg); border:1px solid var(--field-line); border-radius:18px; outline:none;
+    width:100%; padding: 13px 16px; font: inherit; color: var(--text);
+    background: var(--field-bg); border:1px solid var(--field-line); border-radius:14px; outline:none;
     transition: border-color .2s ease;
-    box-shadow: var(--soft-shadow);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   }
-  .login input:focus{ border-color: var(--accent); }
+  .login input:focus{ border-color: var(--accent); box-shadow: 0 0 0 3px var(--info-ring); }
   .login button{
     width:100%; padding: 14px; font: inherit; font-weight:600;
-    background: var(--accent); color: var(--accent-fg); border:none; border-radius:18px; cursor:pointer;
+    background: var(--accent); color: var(--accent-fg); border:none; border-radius:14px; cursor:pointer;
+    box-shadow: 0 0 24px rgba(168,204,224,.18);
   }
   .login button:active{ transform: scale(.99); }
-  .login .err{ color:#c0533f; font-size:13px; min-height:16px; text-align:center; margin:0; }
+  .login .err{ color:#E0A8A8; font-size:13px; min-height:16px; text-align:center; margin:0; }
   .hidden{ display:none !important; }
   /* 已登录预恢复(见 head 里的 authed 脚本):首帧直接显示主界面,不闪登录页 */
   html.authed #login{ display:none !important; }
@@ -1611,16 +1606,36 @@
   }
 
   /* hero: app title · since · days */
-  .menu-hero{ flex: 0 0 auto; margin-bottom: clamp(38px, 11vw, 72px); }
+  .menu-hero{ flex: 0 0 auto; margin-bottom: clamp(38px, 11vw, 72px); text-align: center; }
   .menu-title{
-    font-family: "Pinyon Script", var(--font-en), cursive;
-    font-weight: 400;
-    font-size: clamp(46px, 15vw, 86px);
-    line-height: 1.04;
-    color: var(--text);
-    margin: 0 0 clamp(16px, 4.4vw, 26px);
-    letter-spacing: .005em;
-    text-shadow: 0 2px 26px rgba(0,0,0,.16);
+    font-family: var(--font-en), var(--font-cn);
+    font-weight: 700;
+    font-size: clamp(34px, 9vw, 48px);
+    line-height: 1.1;
+    color: var(--accent);
+    margin: 0 0 8px;
+    letter-spacing: .04em;
+    text-shadow: 0 0 40px rgba(168,204,224,.25), 0 0 80px rgba(168,204,224,.10);
+  }
+  .menu-tagline{
+    font-family: var(--font-en), var(--font-cn);
+    font-size: 15px; font-weight: 400;
+    letter-spacing: .32em; color: var(--text-soft);
+    margin: 0 0 clamp(16px, 4.4vw, 24px);
+  }
+  .menu-brand-divider{
+    display:flex; align-items:center; justify-content:center;
+    width:100%; margin: 0 0 clamp(16px, 4.4vw, 24px); position:relative;
+  }
+  .menu-brand-divider::before,
+  .menu-brand-divider::after{
+    content:""; flex:1; height:1px;
+    background: linear-gradient(90deg, transparent, rgba(168,204,224,.28), transparent);
+  }
+  .menu-brand-dot{
+    width:6px; height:6px; border-radius:50%; flex:none;
+    background: var(--accent); box-shadow: 0 0 10px rgba(168,204,224,.4);
+    margin: 0 14px;
   }
   .menu-since{
     font-family: var(--font-en), var(--font-cn);
@@ -1635,37 +1650,50 @@
   .menu-days .num{ font-size: clamp(30px, 8.4vw, 48px); font-weight:500; line-height:1; letter-spacing:.01em; }
   .menu-days .lab{ font-size: clamp(12px, 3.1vw, 15px); letter-spacing:.13em; color: var(--text-soft); }
 
-  /* list */
-  .menu-list{ flex: 0 0 auto; display:flex; flex-direction:column; }
-  .menu-item{
+  /* grid · 2×3 glass cards */
+  .menu-list{
+    flex: 0 0 auto;
     display:grid;
-    grid-template-columns: clamp(22px, 6vw, 27px) auto 1fr auto;
-    align-items:center; gap: clamp(12px, 3.4vw, 18px);
-    width:100%; text-align:left;
-    background:transparent; border:0;
-    border-top:1px solid var(--hairline);
-    padding: clamp(15px, 4.4vw, 21px) 2px;
-    color: var(--text); font: inherit; cursor:pointer;
-    transition: background .18s ease, transform .12s ease;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(12px, 3.2vw, 16px);
   }
-  .menu-item:last-child{ border-bottom:1px solid var(--hairline); }
-  .menu-item:active{ background: var(--row-press); transform: scale(.995); }
-  .menu-ic{ display:grid; place-items:center; color: var(--text-soft); }
-  .menu-ic svg{ width: clamp(19px, 5vw, 22px); height: clamp(19px, 5vw, 22px); display:block; }
-  .menu-dot{ width:3px; height:3px; border-radius:50%; background: var(--text-faint); opacity:.5; }
-  .menu-copy{ display:flex; flex-direction:column; min-width:0; }
+  .menu-item{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: clamp(8px, 2.2vw, 10px);
+    width:100%; text-align:center;
+    min-height: clamp(128px, 36vw, 150px);
+    padding: clamp(18px, 5vw, 24px) 10px clamp(15px, 4vw, 20px);
+    background: var(--bubble-ai-bg);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border:1px solid var(--hairline); border-radius:20px;
+    box-shadow: var(--soft-shadow);
+    color: var(--text); font: inherit; cursor:pointer;
+    transition: background .2s ease, transform .14s ease, box-shadow .2s ease, border-color .2s ease;
+  }
+  .menu-item:active{ transform: scale(.97); box-shadow: none; }
+  .menu-ic{
+    display:grid; place-items:center;
+    width: clamp(48px, 13vw, 60px); height: clamp(48px, 13vw, 60px);
+    border-radius: 16px; color:#0A1620; flex:none;
+    box-shadow: 0 6px 20px rgba(0,0,0,.20);
+  }
+  .menu-ic svg{ width: clamp(22px, 6vw, 28px); height: clamp(22px, 6vw, 28px); display:block; }
+  .menu-item[data-menu="chat"]   .menu-ic{ background: linear-gradient(135deg, #BFDCEA, #8EB8D0); }
+  .menu-item[data-menu="movie"]  .menu-ic{ background: linear-gradient(135deg, #C8C8E0, #A5A5CF); }
+  .menu-item[data-menu="fridge"] .menu-ic{ background: linear-gradient(135deg, #B6E2D4, #8EC8B8); }
+  .menu-item[data-menu="memory"] .menu-ic{ background: linear-gradient(135deg, #EADCB0, #D4C08A); }
+  .menu-item[data-menu="tides"]  .menu-ic{ background: linear-gradient(135deg, #BFDCEA, #7FB6CE); }
+  .menu-item[data-menu="room"]   .menu-ic{ background: linear-gradient(135deg, #E4C6B6, #CEA690); }
   .menu-name{
     font-family: var(--font-en), var(--font-cn);
-    font-size: clamp(18px, 5vw, 23px); font-weight:500; line-height:1.14;
-    color: var(--text); margin-bottom:2px;
+    font-size: clamp(15px, 4vw, 17px); font-weight:600; line-height:1.2;
+    color: var(--text);
   }
   .menu-sub{
     font-family: var(--font-en), var(--font-cn);
-    font-size: clamp(8.5px, 2.3vw, 10px); letter-spacing:.16em;
+    font-size: clamp(10px, 2.6vw, 12px); letter-spacing:.06em;
     text-transform:uppercase; color: var(--text-faint);
   }
-  .menu-chev{ color: var(--text-faint); display:grid; place-items:center; }
-  .menu-chev svg{ width:15px; height:15px; display:block; }
 
   /* footer */
   .menu-foot{
@@ -1685,7 +1713,7 @@
   }
   .call-scrim{
     position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.25) 40%, rgba(255,255,255,.45) 100%);
+    background: linear-gradient(180deg, rgba(5,13,20,.5) 0%, rgba(5,13,20,.22) 40%, rgba(5,13,20,.5) 100%);
     pointer-events: none;
     opacity: 0;
     transition: opacity .3s ease;
@@ -2312,14 +2340,17 @@
 
 <!-- ── Login ── -->
 <div class="login" id="login">
-  <div class="orb"></div>
-  <h1>Claude</h1>
-  <p class="sub">输入连接密钥,进入你和Claude的频道。</p>
-  <form id="loginForm" autocomplete="off">
-    <input id="secretInput" type="password" inputmode="text" placeholder="连接密钥" autocomplete="off" spellcheck="false">
-    <button type="submit">连接</button>
-    <p class="err" id="loginErr"></p>
-  </form>
+  <div class="login-card">
+    <div class="orb"></div>
+    <h1>Tidal Echo</h1>
+    <p class="sub">输入连接密钥,进入你和Claude的频道。</p>
+    <form id="loginForm" autocomplete="off">
+      <label class="login-label" for="secretInput">连接密钥</label>
+      <input id="secretInput" type="password" inputmode="text" placeholder="输入你的连接密钥" autocomplete="off" spellcheck="false">
+      <button type="submit">连接</button>
+      <p class="err" id="loginErr"></p>
+    </form>
+  </div>
 </div>
 
 <!-- ── App ── -->
@@ -2495,8 +2526,7 @@
       <section class="settings-card">
         <div class="settings-label">主题</div>
         <div class="segmented" id="themeSeg" role="group" aria-label="主题切换">
-          <button type="button" data-val="light">珍珠</button>
-          <button type="button" data-val="harbor">海港</button>
+          <button type="button" data-val="tide">潮汐</button>
         </div>
       </section>
 
@@ -2804,47 +2834,43 @@
       <!-- hero -->
       <div class="menu-hero">
         <h1 class="menu-title">Tidal Echo</h1>
+        <p class="menu-tagline">潮汐回响</p>
+        <div class="menu-brand-divider"><span class="menu-brand-dot"></span></div>
         <p class="menu-since">since 2026/01/01</p>
         <div class="menu-days"><span class="num" id="menuDays">113</span><span class="lab">Days together</span></div>
       </div>
 
-      <!-- list -->
+      <!-- grid -->
       <nav class="menu-list" aria-label="主菜单">
         <button class="menu-item" type="button" data-menu="chat">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></span>
-          <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Chat</span><span class="menu-sub">Write from the deep.</span></span>
-          <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="menu-name">聊天</span>
+          <span class="menu-sub">Chat</span>
         </button>
         <button class="menu-item" type="button" data-menu="movie">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.4"/><path d="M7.5 5v14M16.5 5v14M3 9.5h4.5M3 14.5h4.5M16.5 9.5H21M16.5 14.5H21"/></svg></span>
-          <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Movie</span><span class="menu-sub">Fragments of light.</span></span>
-          <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="menu-name">电影</span>
+          <span class="menu-sub">Movie</span>
         </button>
         <button class="menu-item" type="button" data-menu="fridge">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="3" width="15.6" height="18" rx="2"/><path d="M8.8 3v1.2M15.2 3v1.2M8.8 21v-1.2M15.2 21v-1.2"/><path d="M12 7.5v6M12 13.5l-1.1-1.2M12 13.5l1.1-1.2"/></svg></span>
-          <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Fridge</span><span class="menu-sub">Notes on our door.</span></span>
-          <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="menu-name">冰箱</span>
+          <span class="menu-sub">Fridge</span>
         </button>
         <button class="menu-item" type="button" data-menu="memory">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.8 5 3.5 7.7 8.5 8.5-5 .8-7.7 3.5-8.5 8.5-.8-5-3.5-7.7-8.5-8.5 5-.8 7.7-3.5 8.5-8.5Z"/></svg></span>
-          <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Memory</span><span class="menu-sub">A door to his vault.</span></span>
-          <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="menu-name">记忆</span>
+          <span class="menu-sub">Memory</span>
         </button>
         <button class="menu-item" type="button" data-menu="tides">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/><path d="M3 13c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/><path d="M3 17.5c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/></svg></span>
-          <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Tides</span><span class="menu-sub">Where we return.</span></span>
-          <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="menu-name">潮汐</span>
+          <span class="menu-sub">Tides</span>
         </button>
         <button class="menu-item" type="button" data-menu="room">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V9a7 7 0 0 1 14 0v12"/><path d="M4 21h16"/><circle cx="15" cy="13" r=".95" fill="currentColor" stroke="none"/></svg></span>
-          <span class="menu-dot"></span>
-          <span class="menu-copy"><span class="menu-name">Room</span><span class="menu-sub">Our quiet place.</span></span>
-          <span class="menu-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          <span class="menu-name">房间</span>
+          <span class="menu-sub">Room</span>
         </button>
       </nav>
 
@@ -3052,8 +3078,8 @@ let exportFormat = "json";     // "json" | "text"
 let editingMcpIndex = null;
 
 /* ════════ 固定聊天背景 + 本地头像 ════════ */
-const THEMES = ["light","harbor"];
-const WALLS = { light: "chat-light.webp", harbor: "chat-harbor.webp" };
+const THEMES = ["tide"];
+const WALLS = { tide: "beach.webp" };
 const AVATAR_KEY = "companion_avatar";
 const REMARK_KEY = "companion_profile_remark";
 const SESSION_PICK_KEY = "companion_api_session_pick";
@@ -3064,9 +3090,9 @@ let activeApiSession = LEGACY_SESSION_ID;
 
 function currentTheme(){
   const t = document.documentElement.getAttribute("data-theme");
-  return THEMES.indexOf(t) >= 0 ? t : "light";
+  return THEMES.indexOf(t) >= 0 ? t : "tide";
 }
-function currentWall(){ return WALLS[currentTheme()] || WALLS.light; }
+function currentWall(){ return WALLS[currentTheme()] || WALLS.tide; }
 
 function setThemeColor(color){
   var meta = document.querySelector('meta[name="theme-color"]');
@@ -3260,7 +3286,7 @@ function syncThemeSeg(){
   });
 }
 function setTheme(mode){
-  const t = THEMES.indexOf(mode) >= 0 ? mode : "light";
+  const t = THEMES.indexOf(mode) >= 0 ? mode : "tide";
   document.documentElement.setAttribute("data-theme", t);
   try{ localStorage.setItem(THEME_KEY, t); }catch(e){}
   syncThemeSeg();

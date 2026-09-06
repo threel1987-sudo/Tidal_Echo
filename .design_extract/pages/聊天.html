@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天</title>
+    <style id="theme-vars">
+/* ===== Tidal Echo — Soft Glassmorphism Design Tokens ===== */
+/* Pastel Glass theme — milky glass, soft pastel accents, dark beach base */
+
+:root {
+  /* --- Brand Primary (soft glass blue) --- */
+  --tide-primary:            #A8CCE0;
+  --tide-primary-hover:      #BBD8E8;
+  --tide-primary-active:     #8EB8D0;
+  --tide-primary-glow:       rgba(168, 204, 224, 0.18);
+  --tide-primary-foreground: #0A1620;
+
+  /* --- Accent Pastels --- */
+  --tide-accent-mint:        #A8D8C8;
+  --tide-accent-pink:        #E0B8C8;
+  --tide-accent-yellow:      #E8D8A8;
+  --tide-accent-lavender:    #C8C8E0;
+  --tide-accent-coral:       #E0C0B0;
+
+  /* --- Glass Surfaces (milky) --- */
+  --tide-glass-bg:           rgba(255, 255, 255, 0.16);
+  --tide-glass-bg-strong:    rgba(255, 255, 255, 0.22);
+  --tide-glass-bg-light:     rgba(255, 255, 255, 0.10);
+  --tide-glass-border:       rgba(255, 255, 255, 0.12);
+  --tide-glass-border-strong: rgba(255, 255, 255, 0.20);
+  --tide-glass-blur:         14px;
+  --tide-glass-blur-light:   10px;
+  --tide-glass-blur-strong:  22px;
+
+  /* --- Neutral / Surface --- */
+  --tide-background:         #050D14;
+  --tide-foreground:         #F2F0EE;
+  --tide-foreground-muted:   #B8B8C0;
+  --tide-foreground-dim:     #808088;
+  --tide-card:               rgba(255, 255, 255, 0.14);
+  --tide-card-foreground:    #F2F0EE;
+  --tide-popover:            rgba(18, 22, 30, 0.94);
+  --tide-popover-foreground: #F2F0EE;
+  --tide-muted:              rgba(255, 255, 255, 0.07);
+  --tide-muted-foreground:   #949290;
+  --tide-border:             rgba(255, 255, 255, 0.08);
+  --tide-input:              rgba(255, 255, 255, 0.12);
+  --tide-input-focus:        rgba(255, 255, 255, 0.20);
+  --tide-ring:               rgba(168, 204, 224, 0.35);
+
+  /* --- State Colors --- */
+  --tide-state-success:      #A8D8C0;
+  --tide-state-warning:      #E0D0A8;
+  --tide-state-error:        #E0A8A8;
+  --tide-state-info:         #A8C0D8;
+
+  /* --- Typography --- */
+  --tide-font-sans:          "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --tide-font-mono:          "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
+
+  /* --- Radius --- */
+  --tide-radius-sm:          4px;
+  --tide-radius-md:          8px;
+  --tide-radius-lg:          16px;
+  --tide-radius-xl:          20px;
+  --tide-radius-full:        9999px;
+  --tide-radius-bubble-ai:   5px 20px 20px 20px;
+  --tide-radius-bubble-me:   20px 5px 20px 20px;
+
+  /* --- Shadows (softer) --- */
+  --tide-shadow-1:           0 2px 12px rgba(0, 0, 0, 0.12);
+  --tide-shadow-2:           0 8px 32px rgba(0, 0, 0, 0.20);
+  --tide-shadow-3:           0 16px 48px rgba(0, 0, 0, 0.28);
+  --tide-shadow-glow:        0 0 24px rgba(168, 204, 224, 0.12);
+  --tide-shadow-icon:        0 6px 20px rgba(0, 0, 0, 0.15);
+
+  /* --- Spacing --- */
+  --tide-s-1: 4px;
+  --tide-s-2: 8px;
+  --tide-s-3: 12px;
+  --tide-s-4: 16px;
+  --tide-s-5: 24px;
+  --tide-s-6: 32px;
+  --tide-s-7: 48px;
+  --tide-s-8: 80px;
+
+  /* --- Sizing --- */
+  --tide-bar-top: 60px;
+  --tide-bar-bottom: 72px;
+  --tide-side-padding: 16px;
+}
+
+/* ===== Glassmorphism Utility Classes ===== */
+.glass-card {
+  background: var(--tide-glass-bg);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border);
+  border-radius: var(--tide-radius-lg);
+  box-shadow: var(--tide-shadow-2);
+}
+
+.glass-card-strong {
+  background: var(--tide-glass-bg-strong);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border-strong);
+  border-radius: var(--tide-radius-lg);
+  box-shadow: var(--tide-shadow-2);
+}
+
+.glass-panel {
+  background: var(--tide-glass-bg-light);
+  backdrop-filter: blur(var(--tide-glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-light));
+  border-bottom: 1px solid var(--tide-glass-border);
+}
+
+.glass-input {
+  background: var(--tide-input);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border);
+  border-radius: var(--tide-radius-md);
+  color: var(--tide-foreground);
+  font-family: var(--tide-font-sans);
+  font-size: 15px;
+  padding: 12px 16px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  background: var(--tide-input-focus);
+  border-color: var(--tide-glass-border-strong);
+  box-shadow: 0 0 0 3px var(--tide-ring);
+}
+
+.glass-input::placeholder {
+  color: var(--tide-foreground-dim);
+}
+
+.glass-btn {
+  background: var(--tide-glass-bg);
+  backdrop-filter: blur(var(--tide-glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-light));
+  border: 1px solid var(--tide-glass-border);
+  border-radius: var(--tide-radius-md);
+  color: var(--tide-foreground);
+  font-family: var(--tide-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.glass-btn:hover {
+  background: var(--tide-glass-bg-strong);
+  border-color: var(--tide-glass-border-strong);
+}
+
+.glass-btn-primary {
+  background: var(--tide-primary);
+  border-color: transparent;
+  color: var(--tide-primary-foreground);
+  font-weight: 600;
+  box-shadow: var(--tide-shadow-glow);
+}
+
+.glass-btn-primary:hover {
+  background: var(--tide-primary-hover);
+  box-shadow: 0 0 28px rgba(168, 204, 224, 0.25);
+}
+
+.glass-btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--tide-radius-full);
+  background: var(--tide-glass-bg);
+  border: 1px solid var(--tide-glass-border);
+  backdrop-filter: blur(var(--tide-glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-light));
+  color: var(--tide-foreground);
+  font-size: 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.glass-btn-icon:hover {
+  background: var(--tide-glass-bg-strong);
+  border-color: var(--tide-glass-border-strong);
+}
+
+/* ===== Typography Scale ===== */
+.tide-display {
+  font-family: var(--tide-font-sans);
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.tide-h1 {
+  font-family: var(--tide-font-sans);
+  font-size: clamp(26px, 3.5vw, 36px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.tide-h2 {
+  font-family: var(--tide-font-sans);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.tide-h3 {
+  font-family: var(--tide-font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tide-body {
+  font-family: var(--tide-font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.tide-body-lg {
+  font-family: var(--tide-font-sans);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.tide-caption {
+  font-family: var(--tide-font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.005em;
+  color: var(--tide-foreground-muted);
+}
+
+.tide-mono {
+  font-family: var(--tide-font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* ===== Base Reset ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: var(--tide-font-sans);
+  color: var(--tide-foreground);
+  background: var(--tide-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ===== Page Shell ===== */
+.page-shell {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: var(--tide-background);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.page-bg-beach {
+  background-image: url('../assets/bg-beach.jpg');
+}
+
+.page-bg-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(5, 13, 20, 0.40) 0%,
+    rgba(5, 13, 20, 0.25) 40%,
+    rgba(5, 13, 20, 0.50) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 var(--tide-side-padding);
+  min-height: 100dvh;
+}
+
+/* ===== Top Bar ===== */
+.top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--tide-bar-top);
+  padding: 0 var(--tide-side-padding);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(var(--tide-glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-strong));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.top-bar-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--tide-foreground);
+  letter-spacing: -0.01em;
+}
+
+/* ===== Bottom Bar ===== */
+.bottom-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  padding: 12px var(--tide-side-padding);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(var(--tide-glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-strong));
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ===== Icon Card (home nav) ===== */
+.glass-icon-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 12px 14px;
+  border-radius: var(--tide-radius-xl);
+  background: var(--tide-glass-bg);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border);
+  box-shadow: var(--tide-shadow-2);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--tide-foreground);
+}
+
+.glass-icon-card:hover {
+  background: var(--tide-glass-bg-strong);
+  border-color: var(--tide-glass-border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--tide-shadow-3);
+}
+
+.glass-icon-card:active {
+  transform: translateY(0);
+  box-shadow: var(--tide-shadow-1);
+}
+
+.glass-icon-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: var(--tide-shadow-icon);
+}
+
+.glass-icon-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tide-foreground);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ===== Transitions ===== */
+.fade-in {
+  animation: fadeIn 0.4s ease both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(168, 204, 224, 0.10); }
+  50%      { box-shadow: 0 0 32px rgba(168, 204, 224, 0.22); }
+}
+
+.glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--tide-background);
+    --color-foreground: var(--tide-foreground);
+    --color-card: var(--tide-card);
+    --color-card-foreground: var(--tide-card-foreground);
+    --color-popover: var(--tide-popover);
+    --color-popover-foreground: var(--tide-popover-foreground);
+    --color-primary: var(--tide-primary);
+    --color-primary-foreground: var(--tide-primary-foreground);
+    --color-muted: var(--tide-muted);
+    --color-muted-foreground: var(--tide-muted-foreground);
+    --color-border: var(--tide-border);
+    --color-input: var(--tide-input);
+    --color-ring: var(--tide-ring);
+    --radius-sm: var(--tide-radius-sm);
+    --radius-md: var(--tide-radius-md);
+    --radius-lg: var(--tide-radius-lg);
+    --radius-xl: var(--tide-radius-xl);
+  }
+  @layer base {
+    body { background: var(--tide-background); color: var(--tide-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--tide-background); }
+      .text-background { color: var(--tide-background); }
+      .border-background { border-color: var(--tide-background); }
+      .ring-background { --tw-ring-color: var(--tide-background); }
+      .bg-foreground { background-color: var(--tide-foreground); }
+      .text-foreground { color: var(--tide-foreground); }
+      .border-foreground { border-color: var(--tide-foreground); }
+      .ring-foreground { --tw-ring-color: var(--tide-foreground); }
+      .bg-card { background-color: var(--tide-card); }
+      .text-card { color: var(--tide-card); }
+      .border-card { border-color: var(--tide-card); }
+      .ring-card { --tw-ring-color: var(--tide-card); }
+      .bg-card-foreground { background-color: var(--tide-card-foreground); }
+      .text-card-foreground { color: var(--tide-card-foreground); }
+      .border-card-foreground { border-color: var(--tide-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--tide-card-foreground); }
+      .bg-popover { background-color: var(--tide-popover); }
+      .text-popover { color: var(--tide-popover); }
+      .border-popover { border-color: var(--tide-popover); }
+      .ring-popover { --tw-ring-color: var(--tide-popover); }
+      .bg-popover-foreground { background-color: var(--tide-popover-foreground); }
+      .text-popover-foreground { color: var(--tide-popover-foreground); }
+      .border-popover-foreground { border-color: var(--tide-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--tide-popover-foreground); }
+      .bg-primary { background-color: var(--tide-primary); }
+      .text-primary { color: var(--tide-primary); }
+      .border-primary { border-color: var(--tide-primary); }
+      .ring-primary { --tw-ring-color: var(--tide-primary); }
+      .bg-primary-foreground { background-color: var(--tide-primary-foreground); }
+      .text-primary-foreground { color: var(--tide-primary-foreground); }
+      .border-primary-foreground { border-color: var(--tide-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--tide-primary-foreground); }
+      .bg-muted { background-color: var(--tide-muted); }
+      .text-muted { color: var(--tide-muted); }
+      .border-muted { border-color: var(--tide-muted); }
+      .ring-muted { --tw-ring-color: var(--tide-muted); }
+      .bg-muted-foreground { background-color: var(--tide-muted-foreground); }
+      .text-muted-foreground { color: var(--tide-muted-foreground); }
+      .border-muted-foreground { border-color: var(--tide-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--tide-muted-foreground); }
+      .bg-border { background-color: var(--tide-border); }
+      .text-border { color: var(--tide-border); }
+      .border-border { border-color: var(--tide-border); }
+      .ring-border { --tw-ring-color: var(--tide-border); }
+      .bg-input { background-color: var(--tide-input); }
+      .text-input { color: var(--tide-input); }
+      .border-input { border-color: var(--tide-input); }
+      .ring-input { --tw-ring-color: var(--tide-input); }
+      .bg-ring { background-color: var(--tide-ring); }
+      .text-ring { color: var(--tide-ring); }
+      .border-ring { border-color: var(--tide-ring); }
+      .ring-ring { --tw-ring-color: var(--tide-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <div class="page-shell page-bg-beach" id="page-chat">
+      <div class="page-bg-overlay"></div>
+
+      <!-- Top Bar -->
+      <div class="top-bar glass-panel">
+        <button id="chat-back-btn" data-dom-id="chat-back-btn" class="glass-btn-icon" aria-label="返回">
+          <i data-lucide="chevron-left" style="width:20px;height:20px"></i>
+        </button>
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold" style="background: var(--tide-glass-bg); color: var(--tide-primary);">阿</div>
+            <div class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2" style="background: var(--tide-state-success); border-color: rgba(5,13,20,0.6);"></div>
+          </div>
+          <span class="top-bar-title">阿克</span>
+        </div>
+        <button id="nav-to-home" data-dom-id="nav-to-home" class="glass-btn-icon" aria-label="更多">
+          <i data-lucide="more-horizontal" style="width:20px;height:20px"></i>
+        </button>
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="page-content" style="padding-top:72px; padding-bottom:80px; display:flex; flex-direction:column; gap:16px;">
+
+        <!-- AI Message 1 -->
+        <div class="chat-msg chat-msg-ai fade-in" style="animation-delay: 0.1s;">
+          <div class="flex items-start gap-2">
+            <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold" style="background: var(--tide-glass-bg); color: var(--tide-primary);">阿</div>
+            <div class="chat-bubble chat-bubble-ai">
+              <p class="tide-body">你好，我是阿克。今天想聊些什么？</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Message 2 -->
+        <div class="chat-msg chat-msg-ai fade-in" style="animation-delay: 0.2s;">
+          <div class="flex items-start gap-2">
+            <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold" style="background: var(--tide-glass-bg); color: var(--tide-primary);">阿</div>
+            <div class="chat-bubble chat-bubble-ai">
+              <p class="tide-body">你可以和我分享心情，或者让我帮你写点东西。比如写一封信，编一段故事，又或者只是随便聊聊。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Message 1 -->
+        <div class="chat-msg chat-msg-me fade-in" style="animation-delay: 0.3s;">
+          <div class="flex items-start gap-2 justify-end">
+            <div class="chat-bubble chat-bubble-me">
+              <p class="tide-body">Write a letter to my future self, five years from now. I want to remind myself of the dreams I have today.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Message 3 -->
+        <div class="chat-msg chat-msg-ai fade-in" style="animation-delay: 0.4s;">
+          <div class="flex items-start gap-2">
+            <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold" style="background: var(--tide-glass-bg); color: var(--tide-primary);">阿</div>
+            <div class="chat-bubble chat-bubble-ai">
+              <p class="tide-body">Dear Future Me,</p>
+              <p class="tide-body" style="margin-top:8px;">I hope this letter finds you well. Five years have passed since I wrote this — I wonder if you still remember the person you were.</p>
+              <p class="tide-body" style="margin-top:8px;">Today, I dream of building things that matter. I dream of writing stories that move people. I dream of waking up excited for the day ahead.</p>
+              <p class="tide-body" style="margin-top:8px;">Tell me — did any of it come true?</p>
+              <p class="tide-body" style="margin-top:8px;">With hope,<br/>Your Past Self</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Message 2 -->
+        <div class="chat-msg chat-msg-me fade-in" style="animation-delay: 0.5s;">
+          <div class="flex items-start gap-2 justify-end">
+            <div class="chat-bubble chat-bubble-me">
+              <p class="tide-body">这段写得真好。能把最后那句"With hope"改成"With love and courage"吗？</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Message 4 -->
+        <div class="chat-msg chat-msg-ai fade-in" style="animation-delay: 0.6s;">
+          <div class="flex items-start gap-2">
+            <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold" style="background: var(--tide-glass-bg); color: var(--tide-primary);">阿</div>
+            <div class="chat-bubble chat-bubble-ai">
+              <p class="tide-body">当然可以。已经改好了：</p>
+              <p class="tide-body" style="margin-top:8px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.06); border-left: 3px solid var(--tide-primary);">…With love and courage,<br/>Your Past Self</p>
+              <p class="tide-body" style="margin-top:8px;">这样更有温度，也更像你现在的样子。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Message 3 -->
+        <div class="chat-msg chat-msg-me fade-in" style="animation-delay: 0.7s;">
+          <div class="flex items-start gap-2 justify-end">
+            <div class="chat-bubble chat-bubble-me">
+              <p class="tide-body">谢谢阿克。我好像真的更了解自己了。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Message 5 -->
+        <div class="chat-msg chat-msg-ai fade-in" style="animation-delay: 0.8s;">
+          <div class="flex items-start gap-2">
+            <div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold" style="background: var(--tide-glass-bg); color: var(--tide-primary);">阿</div>
+            <div class="chat-bubble chat-bubble-ai">
+              <p class="tide-body">这是我最大的荣幸。每一次对话，都是在帮你更靠近自己。需要我帮你把这封信保存下来吗？</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Bar -->
+      <div class="bottom-bar glass-panel">
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            class="glass-input flex-1"
+            placeholder="写一封信..."
+            id="chat-input"
+          />
+          <button id="chat-send-btn" data-dom-id="chat-send-btn" class="glass-btn-icon glow-pulse" aria-label="发送" style="flex-shrink:0;">
+            <i data-lucide="send" style="width:18px;height:18px"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      /* Chat-specific bubble styles */
+      .chat-bubble {
+        max-width: 78%;
+        padding: 12px 16px;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--tide-foreground);
+        word-break: break-word;
+      }
+
+      .chat-bubble-ai {
+        background: var(--tide-glass-bg);
+        backdrop-filter: blur(var(--tide-glass-blur));
+        -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+        border: 1px solid var(--tide-glass-border);
+        border-radius: var(--tide-radius-bubble-ai);
+        box-shadow: var(--tide-shadow-1);
+      }
+
+      .chat-bubble-me {
+        background: var(--tide-glass-bg-strong);
+        backdrop-filter: blur(var(--tide-glass-blur));
+        -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+        border: 1px solid var(--tide-glass-border-strong);
+        border-radius: var(--tide-radius-bubble-me);
+        box-shadow: var(--tide-shadow-1);
+      }
+
+      .chat-msg {
+        width: 100%;
+      }
+
+      .chat-msg-ai .flex {
+        justify-content: flex-start;
+      }
+
+      .chat-msg-me .flex {
+        justify-content: flex-end;
+      }
+    </style>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>

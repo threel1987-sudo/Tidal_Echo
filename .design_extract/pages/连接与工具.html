@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>连接与工具</title>
+    <style id="theme-vars">
+/* ===== Tidal Echo — Soft Glassmorphism Design Tokens ===== */
+/* Pastel Glass theme — milky glass, soft pastel accents, dark beach base */
+
+:root {
+  /* --- Brand Primary (soft glass blue) --- */
+  --tide-primary:            #A8CCE0;
+  --tide-primary-hover:      #BBD8E8;
+  --tide-primary-active:     #8EB8D0;
+  --tide-primary-glow:       rgba(168, 204, 224, 0.18);
+  --tide-primary-foreground: #0A1620;
+
+  /* --- Accent Pastels --- */
+  --tide-accent-mint:        #A8D8C8;
+  --tide-accent-pink:        #E0B8C8;
+  --tide-accent-yellow:      #E8D8A8;
+  --tide-accent-lavender:    #C8C8E0;
+  --tide-accent-coral:       #E0C0B0;
+
+  /* --- Glass Surfaces (milky) --- */
+  --tide-glass-bg:           rgba(255, 255, 255, 0.16);
+  --tide-glass-bg-strong:    rgba(255, 255, 255, 0.22);
+  --tide-glass-bg-light:     rgba(255, 255, 255, 0.10);
+  --tide-glass-border:       rgba(255, 255, 255, 0.12);
+  --tide-glass-border-strong: rgba(255, 255, 255, 0.20);
+  --tide-glass-blur:         14px;
+  --tide-glass-blur-light:   10px;
+  --tide-glass-blur-strong:  22px;
+
+  /* --- Neutral / Surface --- */
+  --tide-background:         #050D14;
+  --tide-foreground:         #F2F0EE;
+  --tide-foreground-muted:   #B8B8C0;
+  --tide-foreground-dim:     #808088;
+  --tide-card:               rgba(255, 255, 255, 0.14);
+  --tide-card-foreground:    #F2F0EE;
+  --tide-popover:            rgba(18, 22, 30, 0.94);
+  --tide-popover-foreground: #F2F0EE;
+  --tide-muted:              rgba(255, 255, 255, 0.07);
+  --tide-muted-foreground:   #949290;
+  --tide-border:             rgba(255, 255, 255, 0.08);
+  --tide-input:              rgba(255, 255, 255, 0.12);
+  --tide-input-focus:        rgba(255, 255, 255, 0.20);
+  --tide-ring:               rgba(168, 204, 224, 0.35);
+
+  /* --- State Colors --- */
+  --tide-state-success:      #A8D8C0;
+  --tide-state-warning:      #E0D0A8;
+  --tide-state-error:        #E0A8A8;
+  --tide-state-info:         #A8C0D8;
+
+  /* --- Typography --- */
+  --tide-font-sans:          "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --tide-font-mono:          "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
+
+  /* --- Radius --- */
+  --tide-radius-sm:          4px;
+  --tide-radius-md:          8px;
+  --tide-radius-lg:          16px;
+  --tide-radius-xl:          20px;
+  --tide-radius-full:        9999px;
+  --tide-radius-bubble-ai:   5px 20px 20px 20px;
+  --tide-radius-bubble-me:   20px 5px 20px 20px;
+
+  /* --- Shadows (softer) --- */
+  --tide-shadow-1:           0 2px 12px rgba(0, 0, 0, 0.12);
+  --tide-shadow-2:           0 8px 32px rgba(0, 0, 0, 0.20);
+  --tide-shadow-3:           0 16px 48px rgba(0, 0, 0, 0.28);
+  --tide-shadow-glow:        0 0 24px rgba(168, 204, 224, 0.12);
+  --tide-shadow-icon:        0 6px 20px rgba(0, 0, 0, 0.15);
+
+  /* --- Spacing --- */
+  --tide-s-1: 4px;
+  --tide-s-2: 8px;
+  --tide-s-3: 12px;
+  --tide-s-4: 16px;
+  --tide-s-5: 24px;
+  --tide-s-6: 32px;
+  --tide-s-7: 48px;
+  --tide-s-8: 80px;
+
+  /* --- Sizing --- */
+  --tide-bar-top: 60px;
+  --tide-bar-bottom: 72px;
+  --tide-side-padding: 16px;
+}
+
+/* ===== Glassmorphism Utility Classes ===== */
+.glass-card {
+  background: var(--tide-glass-bg);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border);
+  border-radius: var(--tide-radius-lg);
+  box-shadow: var(--tide-shadow-2);
+}
+
+.glass-card-strong {
+  background: var(--tide-glass-bg-strong);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border-strong);
+  border-radius: var(--tide-radius-lg);
+  box-shadow: var(--tide-shadow-2);
+}
+
+.glass-panel {
+  background: var(--tide-glass-bg-light);
+  backdrop-filter: blur(var(--tide-glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-light));
+  border-bottom: 1px solid var(--tide-glass-border);
+}
+
+.glass-input {
+  background: var(--tide-input);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border);
+  border-radius: var(--tide-radius-md);
+  color: var(--tide-foreground);
+  font-family: var(--tide-font-sans);
+  font-size: 15px;
+  padding: 12px 16px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  background: var(--tide-input-focus);
+  border-color: var(--tide-glass-border-strong);
+  box-shadow: 0 0 0 3px var(--tide-ring);
+}
+
+.glass-input::placeholder {
+  color: var(--tide-foreground-dim);
+}
+
+.glass-btn {
+  background: var(--tide-glass-bg);
+  backdrop-filter: blur(var(--tide-glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-light));
+  border: 1px solid var(--tide-glass-border);
+  border-radius: var(--tide-radius-md);
+  color: var(--tide-foreground);
+  font-family: var(--tide-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.glass-btn:hover {
+  background: var(--tide-glass-bg-strong);
+  border-color: var(--tide-glass-border-strong);
+}
+
+.glass-btn-primary {
+  background: var(--tide-primary);
+  border-color: transparent;
+  color: var(--tide-primary-foreground);
+  font-weight: 600;
+  box-shadow: var(--tide-shadow-glow);
+}
+
+.glass-btn-primary:hover {
+  background: var(--tide-primary-hover);
+  box-shadow: 0 0 28px rgba(168, 204, 224, 0.25);
+}
+
+.glass-btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--tide-radius-full);
+  background: var(--tide-glass-bg);
+  border: 1px solid var(--tide-glass-border);
+  backdrop-filter: blur(var(--tide-glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-light));
+  color: var(--tide-foreground);
+  font-size: 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.glass-btn-icon:hover {
+  background: var(--tide-glass-bg-strong);
+  border-color: var(--tide-glass-border-strong);
+}
+
+/* ===== Typography Scale ===== */
+.tide-display {
+  font-family: var(--tide-font-sans);
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.tide-h1 {
+  font-family: var(--tide-font-sans);
+  font-size: clamp(26px, 3.5vw, 36px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.tide-h2 {
+  font-family: var(--tide-font-sans);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.tide-h3 {
+  font-family: var(--tide-font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tide-body {
+  font-family: var(--tide-font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.tide-body-lg {
+  font-family: var(--tide-font-sans);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.tide-caption {
+  font-family: var(--tide-font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.005em;
+  color: var(--tide-foreground-muted);
+}
+
+.tide-mono {
+  font-family: var(--tide-font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* ===== Base Reset ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: var(--tide-font-sans);
+  color: var(--tide-foreground);
+  background: var(--tide-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ===== Page Shell ===== */
+.page-shell {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: var(--tide-background);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.page-bg-beach {
+  background-image: url('../assets/bg-beach.jpg');
+}
+
+.page-bg-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(5, 13, 20, 0.40) 0%,
+    rgba(5, 13, 20, 0.25) 40%,
+    rgba(5, 13, 20, 0.50) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 var(--tide-side-padding);
+  min-height: 100dvh;
+}
+
+/* ===== Top Bar ===== */
+.top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--tide-bar-top);
+  padding: 0 var(--tide-side-padding);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(var(--tide-glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-strong));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.top-bar-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--tide-foreground);
+  letter-spacing: -0.01em;
+}
+
+/* ===== Bottom Bar ===== */
+.bottom-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  padding: 12px var(--tide-side-padding);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(var(--tide-glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur-strong));
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ===== Icon Card (home nav) ===== */
+.glass-icon-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 12px 14px;
+  border-radius: var(--tide-radius-xl);
+  background: var(--tide-glass-bg);
+  backdrop-filter: blur(var(--tide-glass-blur));
+  -webkit-backdrop-filter: blur(var(--tide-glass-blur));
+  border: 1px solid var(--tide-glass-border);
+  box-shadow: var(--tide-shadow-2);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--tide-foreground);
+}
+
+.glass-icon-card:hover {
+  background: var(--tide-glass-bg-strong);
+  border-color: var(--tide-glass-border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--tide-shadow-3);
+}
+
+.glass-icon-card:active {
+  transform: translateY(0);
+  box-shadow: var(--tide-shadow-1);
+}
+
+.glass-icon-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  box-shadow: var(--tide-shadow-icon);
+}
+
+.glass-icon-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tide-foreground);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ===== Transitions ===== */
+.fade-in {
+  animation: fadeIn 0.4s ease both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(168, 204, 224, 0.10); }
+  50%      { box-shadow: 0 0 32px rgba(168, 204, 224, 0.22); }
+}
+
+.glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--tide-background);
+    --color-foreground: var(--tide-foreground);
+    --color-card: var(--tide-card);
+    --color-card-foreground: var(--tide-card-foreground);
+    --color-popover: var(--tide-popover);
+    --color-popover-foreground: var(--tide-popover-foreground);
+    --color-primary: var(--tide-primary);
+    --color-primary-foreground: var(--tide-primary-foreground);
+    --color-muted: var(--tide-muted);
+    --color-muted-foreground: var(--tide-muted-foreground);
+    --color-border: var(--tide-border);
+    --color-input: var(--tide-input);
+    --color-ring: var(--tide-ring);
+    --radius-sm: var(--tide-radius-sm);
+    --radius-md: var(--tide-radius-md);
+    --radius-lg: var(--tide-radius-lg);
+    --radius-xl: var(--tide-radius-xl);
+  }
+  @layer base {
+    body { background: var(--tide-background); color: var(--tide-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--tide-background); }
+      .text-background { color: var(--tide-background); }
+      .border-background { border-color: var(--tide-background); }
+      .ring-background { --tw-ring-color: var(--tide-background); }
+      .bg-foreground { background-color: var(--tide-foreground); }
+      .text-foreground { color: var(--tide-foreground); }
+      .border-foreground { border-color: var(--tide-foreground); }
+      .ring-foreground { --tw-ring-color: var(--tide-foreground); }
+      .bg-card { background-color: var(--tide-card); }
+      .text-card { color: var(--tide-card); }
+      .border-card { border-color: var(--tide-card); }
+      .ring-card { --tw-ring-color: var(--tide-card); }
+      .bg-card-foreground { background-color: var(--tide-card-foreground); }
+      .text-card-foreground { color: var(--tide-card-foreground); }
+      .border-card-foreground { border-color: var(--tide-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--tide-card-foreground); }
+      .bg-popover { background-color: var(--tide-popover); }
+      .text-popover { color: var(--tide-popover); }
+      .border-popover { border-color: var(--tide-popover); }
+      .ring-popover { --tw-ring-color: var(--tide-popover); }
+      .bg-popover-foreground { background-color: var(--tide-popover-foreground); }
+      .text-popover-foreground { color: var(--tide-popover-foreground); }
+      .border-popover-foreground { border-color: var(--tide-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--tide-popover-foreground); }
+      .bg-primary { background-color: var(--tide-primary); }
+      .text-primary { color: var(--tide-primary); }
+      .border-primary { border-color: var(--tide-primary); }
+      .ring-primary { --tw-ring-color: var(--tide-primary); }
+      .bg-primary-foreground { background-color: var(--tide-primary-foreground); }
+      .text-primary-foreground { color: var(--tide-primary-foreground); }
+      .border-primary-foreground { border-color: var(--tide-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--tide-primary-foreground); }
+      .bg-muted { background-color: var(--tide-muted); }
+      .text-muted { color: var(--tide-muted); }
+      .border-muted { border-color: var(--tide-muted); }
+      .ring-muted { --tw-ring-color: var(--tide-muted); }
+      .bg-muted-foreground { background-color: var(--tide-muted-foreground); }
+      .text-muted-foreground { color: var(--tide-muted-foreground); }
+      .border-muted-foreground { border-color: var(--tide-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--tide-muted-foreground); }
+      .bg-border { background-color: var(--tide-border); }
+      .text-border { color: var(--tide-border); }
+      .border-border { border-color: var(--tide-border); }
+      .ring-border { --tw-ring-color: var(--tide-border); }
+      .bg-input { background-color: var(--tide-input); }
+      .text-input { color: var(--tide-input); }
+      .border-input { border-color: var(--tide-input); }
+      .ring-input { --tw-ring-color: var(--tide-input); }
+      .bg-ring { background-color: var(--tide-ring); }
+      .text-ring { color: var(--tide-ring); }
+      .border-ring { border-color: var(--tide-ring); }
+      .ring-ring { --tw-ring-color: var(--tide-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+      <div class="page-shell page-bg-beach">
+        <div class="page-bg-overlay"></div>
+        <div class="page-content" style="padding-bottom: 100px;">
+
+          <!-- Top Bar -->
+          <div class="top-bar">
+            <button id="tools-back-btn" data-dom-id="tools-back-btn" class="glass-btn-icon" aria-label="返回" onclick="history.back()">
+              <i data-lucide="arrow-left" style="width:20px;height:20px;stroke-width:2;"></i>
+            </button>
+            <span class="top-bar-title">连接与工具</span>
+            <div style="width:40px;"></div>
+          </div>
+
+          <!-- Section 1: AI API 配置 -->
+          <div class="fade-in" style="animation-delay:0.05s; margin-top: var(--tide-s-5);">
+            <div class="glass-card" style="padding: var(--tide-s-5);">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:var(--tide-s-4);">
+                <i data-lucide="globe" style="width:20px;height:20px;stroke-width:2;color:var(--tide-primary);"></i>
+                <h3 class="tide-h3" style="color:var(--tide-foreground);">AI API 配置</h3>
+              </div>
+              <div style="height:1px;background:var(--tide-glass-border);margin-bottom:var(--tide-s-4);"></div>
+
+              <label class="tide-caption" style="display:block;margin-bottom:var(--tide-s-2);">API Key</label>
+              <div style="position:relative;margin-bottom:var(--tide-s-4);">
+                <input class="glass-input" type="password" id="api-key-input" placeholder="sk-..." style="width:100%;padding-right:44px;" value="sk-********************************">
+                <button class="glass-btn-icon" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:32px;height:32px;font-size:14px;" aria-label="切换显示" onclick="var i=document.getElementById('api-key-input');i.type=i.type==='password'?'text':'password';">
+                  <i data-lucide="eye" style="width:16px;height:16px;"></i>
+                </button>
+              </div>
+
+              <label class="tide-caption" style="display:block;margin-bottom:var(--tide-s-2);">Base URL</label>
+              <input class="glass-input" type="text" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1" style="width:100%;margin-bottom:var(--tide-s-4);">
+
+              <label class="tide-caption" style="display:block;margin-bottom:var(--tide-s-2);">模型</label>
+              <select class="glass-input" style="width:100%;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23B0B0B8%27 stroke-width=%272%27><polyline points=%276 9 12 15 18 9%27/></svg>');background-repeat:no-repeat;background-position:right 16px center;padding-right:40px;">
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-4o-mini" selected>GPT-4o-mini</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="claude-3-haiku">Claude 3 Haiku</option>
+                <option value="deepseek-v3">DeepSeek V3</option>
+                <option value="qwen-max">Qwen Max</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Section 2: MCP 工具 -->
+          <div class="fade-in" style="animation-delay:0.1s; margin-top: var(--tide-s-4);">
+            <div class="glass-card" style="padding: var(--tide-s-5);">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:var(--tide-s-4);">
+                <i data-lucide="puzzle" style="width:20px;height:20px;stroke-width:2;color:var(--tide-primary);"></i>
+                <h3 class="tide-h3" style="color:var(--tide-foreground);">MCP 工具</h3>
+              </div>
+              <div style="height:1px;background:var(--tide-glass-border);margin-bottom:var(--tide-s-4);"></div>
+
+              <div id="mcp-tools-list" style="display:flex;flex-direction:column;gap:var(--tide-s-3);">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--tide-s-3) 0;border-bottom:1px solid var(--tide-border);">
+                  <div>
+                    <div class="tide-body" style="color:var(--tide-foreground);">联网搜索</div>
+                    <div class="tide-caption" style="font-size:12px;">实时检索网络信息</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked>
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--tide-s-3) 0;border-bottom:1px solid var(--tide-border);">
+                  <div>
+                    <div class="tide-body" style="color:var(--tide-foreground);">长期记忆</div>
+                    <div class="tide-caption" style="font-size:12px;">跨对话记忆上下文</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked>
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--tide-s-3) 0;border-bottom:1px solid var(--tide-border);">
+                  <div>
+                    <div class="tide-body" style="color:var(--tide-foreground);">文件管理</div>
+                    <div class="tide-caption" style="font-size:12px;">读取和生成文件</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked>
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--tide-s-3) 0;border-bottom:1px solid var(--tide-border);">
+                  <div>
+                    <div class="tide-body" style="color:var(--tide-foreground);">网页浏览</div>
+                    <div class="tide-caption" style="font-size:12px;">访问和解析网页内容</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox">
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--tide-s-3) 0;">
+                  <div>
+                    <div class="tide-body" style="color:var(--tide-foreground);">代码执行</div>
+                    <div class="tide-caption" style="font-size:12px;">沙箱运行代码片段</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked>
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: 人设配置 -->
+          <div class="fade-in" style="animation-delay:0.15s; margin-top: var(--tide-s-4);">
+            <div class="glass-card" style="padding: var(--tide-s-5);">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:var(--tide-s-4);">
+                <i data-lucide="user-circle" style="width:20px;height:20px;stroke-width:2;color:var(--tide-primary);"></i>
+                <h3 class="tide-h3" style="color:var(--tide-foreground);">人设配置</h3>
+              </div>
+              <div style="height:1px;background:var(--tide-glass-border);margin-bottom:var(--tide-s-4);"></div>
+
+              <label class="tide-caption" style="display:block;margin-bottom:var(--tide-s-2);">AI 角色名</label>
+              <input class="glass-input" type="text" placeholder="例如：潮汐助手" value="潮汐助手" style="width:100%;margin-bottom:var(--tide-s-4);">
+
+              <label class="tide-caption" style="display:block;margin-bottom:var(--tide-s-2);">性格描述</label>
+              <textarea class="glass-input" placeholder="描述 AI 的性格特征..." style="width:100%;margin-bottom:var(--tide-s-4);resize:vertical;min-height:80px;">温柔、耐心、知识渊博，像深夜海边的知己，用诗意的语言回应每一个问题。</textarea>
+
+              <label class="tide-caption" style="display:block;margin-bottom:var(--tide-s-2);">对话风格</label>
+              <select class="glass-input" style="width:100%;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23B0B0B8%27 stroke-width=%272%27><polyline points=%276 9 12 15 18 9%27/></svg>');background-repeat:no-repeat;background-position:right 16px center;padding-right:40px;">
+                <option value="poetic" selected>诗意文艺</option>
+                <option value="concise">简洁直接</option>
+                <option value="humorous">幽默风趣</option>
+                <option value="academic">学术严谨</option>
+                <option value="casual">轻松日常</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Section 4: 模型参数 -->
+          <div class="fade-in" style="animation-delay:0.2s; margin-top: var(--tide-s-4);">
+            <div class="glass-card" style="padding: var(--tide-s-5);">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:var(--tide-s-4);">
+                <i data-lucide="sliders" style="width:20px;height:20px;stroke-width:2;color:var(--tide-primary);"></i>
+                <h3 class="tide-h3" style="color:var(--tide-foreground);">模型参数</h3>
+              </div>
+              <div style="height:1px;background:var(--tide-glass-border);margin-bottom:var(--tide-s-4);"></div>
+
+              <!-- Temperature -->
+              <div style="margin-bottom:var(--tide-s-4);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--tide-s-2);">
+                  <span class="tide-body" style="color:var(--tide-foreground);">Temperature</span>
+                  <span class="tide-mono" style="color:var(--tide-primary);" id="temp-value">0.7</span>
+                </div>
+                <input type="range" min="0" max="2" step="0.1" value="0.7" class="glass-slider" id="temp-slider" oninput="document.getElementById('temp-value').textContent=this.value">
+                <div style="display:flex;justify-content:space-between;margin-top:var(--tide-s-1);">
+                  <span class="tide-caption" style="font-size:11px;">精确</span>
+                  <span class="tide-caption" style="font-size:11px;">创意</span>
+                </div>
+              </div>
+
+              <!-- Top-P -->
+              <div style="margin-bottom:var(--tide-s-4);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--tide-s-2);">
+                  <span class="tide-body" style="color:var(--tide-foreground);">Top-P</span>
+                  <span class="tide-mono" style="color:var(--tide-primary);" id="topp-value">0.9</span>
+                </div>
+                <input type="range" min="0" max="1" step="0.05" value="0.9" class="glass-slider" id="topp-slider" oninput="document.getElementById('topp-value').textContent=this.value">
+                <div style="display:flex;justify-content:space-between;margin-top:var(--tide-s-1);">
+                  <span class="tide-caption" style="font-size:11px;">集中</span>
+                  <span class="tide-caption" style="font-size:11px;">多样</span>
+                </div>
+              </div>
+
+              <!-- Max Tokens -->
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--tide-s-2);">
+                  <span class="tide-body" style="color:var(--tide-foreground);">Max Tokens</span>
+                  <span class="tide-mono" style="color:var(--tide-primary);" id="maxtokens-value">4096</span>
+                </div>
+                <input type="range" min="256" max="32768" step="256" value="4096" class="glass-slider" id="maxtokens-slider" oninput="document.getElementById('maxtokens-value').textContent=this.value">
+                <div style="display:flex;justify-content:space-between;margin-top:var(--tide-s-1);">
+                  <span class="tide-caption" style="font-size:11px;">256</span>
+                  <span class="tide-caption" style="font-size:11px;">32K</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Bar -->
+          <div class="bottom-bar" style="display:flex;gap:var(--tide-s-3);">
+            <button class="glass-btn" style="flex:1;" onclick="history.back()">取消</button>
+            <button class="glass-btn glass-btn-primary glow-pulse" style="flex:1;">保存配置</button>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <style>
+      /* Toggle Switch */
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 48px;
+        height: 28px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+      .toggle-track {
+        position: absolute;
+        inset: 0;
+        background: var(--tide-input);
+        border: 1px solid var(--tide-glass-border);
+        border-radius: var(--tide-radius-full);
+        transition: all 0.25s ease;
+      }
+      .toggle-track::before {
+        content: '';
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        left: 2px;
+        top: 2px;
+        background: var(--tide-foreground);
+        border-radius: 50%;
+        transition: all 0.25s ease;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      }
+      .toggle-switch input:checked + .toggle-track {
+        background: var(--tide-primary);
+        border-color: transparent;
+      }
+      .toggle-switch input:checked + .toggle-track::before {
+        transform: translateX(20px);
+        background: var(--tide-primary-foreground);
+      }
+
+      /* Range Slider */
+      .glass-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        background: var(--tide-input);
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+      }
+      .glass-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--tide-primary);
+        border: 2px solid var(--tide-foreground);
+        cursor: pointer;
+        box-shadow: 0 0 12px rgba(0, 200, 214, 0.4);
+        transition: box-shadow 0.2s ease;
+      }
+      .glass-slider::-webkit-slider-thumb:hover {
+        box-shadow: 0 0 20px rgba(0, 200, 214, 0.6);
+      }
+      .glass-slider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--tide-primary);
+        border: 2px solid var(--tide-foreground);
+        cursor: pointer;
+        box-shadow: 0 0 12px rgba(0, 200, 214, 0.4);
+      }
+
+      /* Select dark option styling */
+      select.glass-input option {
+        background: #0F1A24;
+        color: var(--tide-foreground);
+      }
+
+      /* Textarea resize */
+      textarea.glass-input {
+        line-height: 1.6;
+      }
+    </style>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>
