@@ -1327,6 +1327,39 @@ def mcp_response_body(resp: httpx.Response) -> dict[str, Any]:
     return events[-1]
 
 
+def _mcp_session_lost(data: dict[str, Any]) -> bool:
+    """OB 每次重新部署都会清空内存态的 MCP 会话存储,旧 session id 随即失效。
+    这里判断响应是否正是「Session not found」这种会话丢失,以便清缓存重握手恢复。"""
+    err = data.get("error") if isinstance(data, dict) else None
+    if isinstance(err, dict):
+        return "Session not found" in str(err.get("message", "") or "")
+    return "Session not found" in str(err or "")
+
+
+async def _mcp_initialize(client: httpx.AsyncClient, url: str, headers: dict[str, Any]) -> None:
+    initialize = {
+        "jsonrpc": "2.0",
+        "id": mcp_next_id(),
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "relay-ai-chat", "version": "1.0.0"},
+        },
+    }
+    init_resp = await client.post(url, headers=headers, json=initialize)
+    init_resp.raise_for_status()
+    init_data = mcp_response_body(init_resp)
+    if init_data.get("error"):
+        raise RuntimeError(str(init_data["error"]))
+    session_id = init_resp.headers.get("mcp-session-id")
+    if session_id:
+        MCP_SESSIONS[url] = session_id
+        notify_headers = dict(headers)
+        notify_headers["Mcp-Session-Id"] = session_id
+        await client.post(url, headers=notify_headers, json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+
+
 async def mcp_call(server: dict[str, Any], method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     url = server["url"]
     headers = {
@@ -1336,38 +1369,30 @@ async def mcp_call(server: dict[str, Any], method: str, params: dict[str, Any] |
     if server.get("token"):
         headers["Authorization"] = f"Bearer {server['token']}"
     async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
-        if method != "initialize" and url not in MCP_SESSIONS:
-            initialize = {
-                "jsonrpc": "2.0",
-                "id": mcp_next_id(),
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": {},
-                    "clientInfo": {"name": "relay-ai-chat", "version": "1.0.0"},
-                },
-            }
-            init_resp = await client.post(url, headers=headers, json=initialize)
-            if init_resp.status_code < 300:
-                init_data = mcp_response_body(init_resp)
-                if init_data.get("error"):
-                    raise RuntimeError(str(init_data["error"]))
-                session_id = init_resp.headers.get("mcp-session-id")
-                if session_id:
-                    MCP_SESSIONS[url] = session_id
-                notify_headers = dict(headers)
-                if session_id:
-                    notify_headers["Mcp-Session-Id"] = session_id
-                await client.post(url, headers=notify_headers, json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        if url in MCP_SESSIONS:
-            headers["Mcp-Session-Id"] = MCP_SESSIONS[url]
-        request = {"jsonrpc": "2.0", "id": mcp_next_id(), "method": method, "params": params or {}}
-        resp = await client.post(url, headers=headers, json=request)
-    resp.raise_for_status()
-    data = mcp_response_body(resp)
-    if data.get("error"):
-        raise RuntimeError(str(data["error"]))
-    return data.get("result") or {}
+        if method == "initialize":
+            await _mcp_initialize(client, url, headers)
+            return {}
+        if url not in MCP_SESSIONS:
+            await _mcp_initialize(client, url, headers)
+        for attempt in range(2):
+            if url in MCP_SESSIONS:
+                headers["Mcp-Session-Id"] = MCP_SESSIONS[url]
+            request = {"jsonrpc": "2.0", "id": mcp_next_id(), "method": method, "params": params or {}}
+            resp = await client.post(url, headers=headers, json=request)
+            try:
+                data = mcp_response_body(resp)
+            except Exception:
+                data = {}
+            # 服务端会话已经没了(OB 重新部署/会话过期):清掉旧缓存、重握手一次再试。
+            if _mcp_session_lost(data) and attempt == 0:
+                MCP_SESSIONS.pop(url, None)
+                await _mcp_initialize(client, url, headers)
+                continue
+            resp.raise_for_status()
+            if data.get("error"):
+                raise RuntimeError(str(data["error"]))
+            return data.get("result") or {}
+    raise RuntimeError("MCP session recovery failed")
 
 
 # ── 工具名消毒:OpenAI/Anthropic 工具名只允许 [A-Za-z0-9_-] 且 ≤64 字符 ───
