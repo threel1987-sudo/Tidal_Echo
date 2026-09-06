@@ -1680,7 +1680,10 @@
     border:1px solid rgba(255,255,255,.16);
     box-shadow: 0 2px 10px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.20);
   }
-  .menu-ic svg{ width: clamp(22px, 6vw, 28px); height: clamp(22px, 6vw, 28px); display:block; }
+  .menu-ic svg{ width: clamp(22px, 6vw, 28px); height: clamp(22px, 6vw, 28px); display:block;
+    stroke-width: 2;
+    filter: drop-shadow(0 -1px 0 rgba(255,255,255,.55)) drop-shadow(0 1.5px 1px rgba(5,20,35,.30));
+  }
   .menu-item[data-menu="chat"]   .menu-ic{ color:#3D8DB6; }
   .menu-item[data-menu="movie"]  .menu-ic{ color:#7A8BC4; }
   .menu-item[data-menu="fridge"] .menu-ic{ color:#5FB394; }
