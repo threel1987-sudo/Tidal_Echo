@@ -1334,6 +1334,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     merged_thinking = merge_thinking(thinking_parts)
     tool_calls_parsed, raw_tool_calls = finalize_tool_calls(tool_calls_buf)
     final_text = "".join(text_parts).strip()
+    if debug_stream:
+        print(f"[api_loop:debug] chat_once done: text_len={len(final_text)} thinking_len={len(''.join(thinking_parts))} parsed_tool_calls={len(tool_calls_parsed)} names={[c.get('name') for c in tool_calls_parsed]} saw_finish={saw_finish}")
     if "role" not in raw_msg:
         raw_msg["role"] = "assistant"
     raw_msg["content"] = final_text
