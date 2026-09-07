@@ -734,8 +734,8 @@
 
   /* ── thinking ── collapsed follows AI bubble; expanded becomes a quiet reading section ── */
   .row.think{
-    justify-content: flex-start;
-    padding-left: calc(var(--avatar-size) + clamp(10px, 1.6vw, 16px));
+    justify-content: center;
+    padding-left: 0;
     padding-right: 0;
     margin-top: clamp(7px, 1.2vw, 12px);
     margin-bottom: clamp(10px, 1.8vw, 18px);
@@ -751,7 +751,7 @@
     width: min(85vw, 560px);
     max-width: min(85vw, 560px);
     color: var(--think-body);
-    text-align: left;
+    text-align: center;
     animation: pop .24s cubic-bezier(.2,.8,.2,1) both;
   }
   .think-block.open{
@@ -1584,7 +1584,7 @@
     textarea{ font-size: 15px; }
     .emojibtn{ width: 28px; height: 28px; }
     .emojibtn svg{ width: 22px; height: 22px; }
-    .row.think{ padding-left: 42px; padding-right: 0; }
+    .row.think{ padding-left: 0; padding-right: 0; }
     .think-block{ width: min(86vw, 560px); max-width: min(86vw, 560px); }
     .think-block.open{ width: 100%; max-width: 100%; }
     .row.think.think-open{ padding-left: 0; padding-right: 0; }
