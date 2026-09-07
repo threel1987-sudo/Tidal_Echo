@@ -1095,6 +1095,60 @@ def finalize_tool_calls(buf: list[dict[str, Any]]) -> tuple[list[dict[str, Any]]
     return parsed, raw
 
 
+# ── 提示词工具模式(<tool_call> 文本协议) ──────────────────────────────────
+# 部分 Anthropic 中转网关(如 claude-opus 系列经 OpenAI 兼容层)不会把原生 tools
+# 参数如实转成 tool_use 块,而是让模型遵循 system 提示词,把工具调用以文本形式吐在
+# content 里: <tool_call>{"name": "...", "arguments": {...}}</tool_call>。
+# 这里把这些文本块从正文里抽出来,折算成与原生 tool_calls 相同的两套结构,交给下游
+# 工具循环统一执行。若不处理,模型会直接把这段原始 XML 当普通聊天文字回给用户。
+_TEXT_TOOL_PAT = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
+
+
+def extract_text_tool_calls(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    """从正文抽出 <tool_call>...</tool_call> 文本协议工具调用。
+
+    返回 (parsed, raw, cleaned_text):
+      - parsed:      [{"name","input"}] 供 PWA/relay 展示
+      - raw:         [{"id","type":"function","function":{"name","arguments"}}] 供回填模型
+      - cleaned_text: 去掉全部工具块后的剩余正文(可能为空)
+    里层 JSON 兼容 name/arguments 与 name/input 两种写法,arguments 也可能是 JSON 字符串。
+    """
+    parsed: list[dict[str, Any]] = []
+    raw: list[dict[str, Any]] = []
+
+    def _repl(match: re.Match[str]) -> str:
+        inner = match.group(1).strip()
+        try:
+            obj = json.loads(inner)
+            if isinstance(obj, str):  # 双重包裹:<tool_call>"..."</tool_call>
+                obj = json.loads(obj)
+        except Exception:
+            return ""
+        if not isinstance(obj, dict):
+            return ""
+        name = str(obj.get("name") or "").strip()
+        if not name:
+            return ""
+        args = obj.get("arguments")
+        if args is None:
+            args = obj.get("input")
+        if not isinstance(args, dict):
+            try:
+                args = json.loads(str(args or "{}"))
+            except Exception:
+                args = {}
+        parsed.append({"name": name, "input": args})
+        raw.append({
+            "id": f"call_{uuid.uuid4().hex[:8]}",
+            "type": "function",
+            "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
+        })
+        return ""
+
+    cleaned = _TEXT_TOOL_PAT.sub(_repl, text).strip()
+    return parsed, raw, cleaned
+
+
 def merge_thinking(parts: list[str]) -> list[dict[str, Any]] | None:
     merged = "".join(parts).strip()
     return [{"content": merged}] if merged else None
@@ -1334,6 +1388,15 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     merged_thinking = merge_thinking(thinking_parts)
     tool_calls_parsed, raw_tool_calls = finalize_tool_calls(tool_calls_buf)
     final_text = "".join(text_parts).strip()
+    # 文本协议工具调用:模型没走原生 tool_calls,而在正文里塞了 <tool_call>…</tool_call>。
+    # 抽出来折算成与原生一致的两套结构,让下游工具循环统一执行;残留正文才作为回复文本。
+    if final_text:
+        _text_parsed, _text_raw, final_text = extract_text_tool_calls(final_text)
+        if _text_parsed:
+            tool_calls_parsed.extend(_text_parsed)
+            raw_tool_calls.extend(_text_raw)
+            if debug_stream:
+                print(f"[api_loop:debug] text tool_calls extracted: names={[c.get('name') for c in _text_parsed]}")
     if debug_stream:
         print(f"[api_loop:debug] chat_once done: text_len={len(final_text)} thinking_len={len(''.join(thinking_parts))} parsed_tool_calls={len(tool_calls_parsed)} names={[c.get('name') for c in tool_calls_parsed]} saw_finish={saw_finish}")
     if "role" not in raw_msg:
@@ -1452,6 +1515,7 @@ async def mcp_call(server: dict[str, Any], method: str, params: dict[str, Any] |
 # 400 bad_response_status_code(逐工具实测全部崩、纯英文名全过)。
 # 这里把服务名/工具名消毒成合法 ASCII,并用映射表反解回真实名字以执行工具。
 _TOOL_NAME_MAP: dict[str, tuple[str, str]] = {}   # public_name -> (server_name, raw_tool_name)
+_TOOL_RAW_MAP: dict[str, tuple[str, str]] = {}    # raw_tool_name -> (server_name, raw_tool_name)
 
 
 def _sanitize_segment(name: str) -> str:
@@ -1474,6 +1538,7 @@ def tool_public_name(server_name: str, raw_name: str) -> str:
 async def mcp_tools() -> list[dict[str, Any]]:
     tools = []
     _TOOL_NAME_MAP.clear()   # 每次重建映射;消毒名字按确定性规则生成,老映射会被覆盖
+    _TOOL_RAW_MAP.clear()    # 原始名反查表同步重建(供文本协议直接叫裸工具名时反解)
     for server in mcp_servers():
         if not server["enabled"]:
             continue
@@ -1487,6 +1552,7 @@ async def mcp_tools() -> list[dict[str, Any]]:
                         continue
                     public_name = tool_public_name(server["name"], raw_name)
                     _TOOL_NAME_MAP[public_name] = (server["name"], raw_name)
+                    _TOOL_RAW_MAP[raw_name] = (server["name"], raw_name)
                     tools.append({"type": "function", "function": {"name": public_name, "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
         except Exception:
             continue
@@ -1631,7 +1697,10 @@ async def warm_injection(session_id: str, *, is_new: bool) -> str:
 
 async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     # 消毒名字优先走映射表(服务名/工具名可能都含中文);没有映射再退回旧前缀解析。
+    # 文本协议工具调用里模型常直接叫「裸工具名」(如 breath),再退回原始名反查表兜底。
     mapped = _TOOL_NAME_MAP.get(tool_name)
+    if not mapped:
+        mapped = _TOOL_RAW_MAP.get(tool_name)
     if mapped:
         sname, raw = mapped
         for server in mcp_servers():
@@ -1650,6 +1719,8 @@ def _tool_display_parts(tool_name: str) -> tuple[str, str]:
     """mcp_<服务器>_<工具名> → (服务器, 工具名);拆不出则返回 ("", 原名)。"""
     name = str(tool_name or "")
     mapped = _TOOL_NAME_MAP.get(name)
+    if not mapped:
+        mapped = _TOOL_RAW_MAP.get(name)
     if mapped:
         return mapped[0], mapped[1]
     for server in mcp_servers():
