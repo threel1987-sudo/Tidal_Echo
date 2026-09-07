@@ -1277,8 +1277,14 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     # ——即用户看到的「一个大气泡里精神分裂」。
                     # 检测到重生 → 作废第一代的正文/思考/工具/usage,只保留最新一代;
                     # done 帧的 final_text 会整体覆盖 relay 草稿,持久化结果只含最新一代。
+                    # 注意:扩展思考型模型(Claude opus 等)经中转网关时,常把「思考阶段」和
+                    # 「工具调用阶段」拆成两段,在思考末尾先补一个 finish_reason、再继续下发
+                    # tool_calls——这是正常的「思考→工具」两段式,不是重生。若把 finish_reason
+                    # 之后的 tool_calls 也当重生,会连工具名一起清掉,工具调用被静默丢弃
+                    # (表现为 has_tool_calls 恒为 False)。所以这里只认 finish_reason 后又来了
+                    # 新的正文/思考才算重生;光来了工具调用不算。
                     if (n["role"] and (text_parts or thinking_parts)) or \
-                       (saw_finish and (n["content"] or n["thinking"] or n["tool_calls"])):
+                       (saw_finish and (n["content"] or n["thinking"])):
                         restart_count += 1
                         text_parts.clear()
                         thinking_parts.clear()
