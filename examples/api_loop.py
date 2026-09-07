@@ -134,6 +134,9 @@ def env_routes() -> list[dict[str, Any]]:
         model = os.environ.get(f"LLM_MODEL{suffix}", "")
         if base and key and model:
             entry: dict[str, Any] = {"url": base, "key": key, "model": model}
+            session_header = os.environ.get(f"LLM_API_SESSION_HEADER{suffix}", "").strip()
+            if session_header:
+                entry["session_header"] = session_header
             extra_h = os.environ.get(f"LLM_API_HEADERS{suffix}", "")
             if extra_h:
                 parsed: dict[str, str] = {}
@@ -767,6 +770,7 @@ def public_config() -> dict[str, Any]:
                 "url": r.get("url", ""),
                 "key_masked": mask_key(r.get("key", "")),
                 "headers": (r.get("headers") or None),
+                "session_header": str(r.get("session_header") or ""),
             }
             for i, r in enumerate(main_chain())
         ],
@@ -843,6 +847,10 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 "url": str(item.get("url") or prev.get("url") or "").strip().rstrip("/"),
                 "key": str(item.get("key") or prev.get("key") or ""),
             }
+            # 会话头名(如 X-Ombre-Session-Id):前端不传时继承旧值,传空串可显式清除
+            sh = str(item.get("session_header", prev.get("session_header", "")) or "").strip()
+            if sh:
+                entry["session_header"] = sh
             if "headers" in item:
                 raw_headers = item.get("headers")
                 if isinstance(raw_headers, dict) and raw_headers:
@@ -1235,7 +1243,7 @@ class _DeltaEmitter:
         self.buf = ""
 
 
-async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, on_restart=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
+async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, on_restart=None, cancel_ev: asyncio.Event | None = None, session_id: str = "") -> dict[str, Any]:
     """一次 chat/completions 调用(流式消费,只攒正文/思考/工具调用)。
 
     sink(chunk) 可选:拿到正文增量就回调(用于 reply_delta 流式草稿)。
@@ -1269,6 +1277,17 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     for hk, hv in (route.get("headers") or {}).items():
         if str(hk) and str(hv):
             req_headers[str(hk)] = str(hv)
+    # 会话头(如 OB gateway 的 X-Ombre-Session-Id):把当前聊天窗口的 api_session
+    # 透传给网关。不配 session_header 时完全不发,行为与之前一致。
+    # 为什么需要:OB 的语义召回去重(semantic_session_dedupe)、轮次注入、
+    # is_session_start/handoff 苏醒判定全部按 session 隔离;不发这个头时所有
+    # 客户端挤在默认 session "main" 里互相污染——别的客户端刚注入过的记忆,
+    # 这边再问就被去重压掉,表现为「关键词召回不起作用」;新窗口也永远触发不了
+    # handoff 苏醒(main 早就有历史了)。每个窗口一个 session 后,这些机制各自
+    # 独立,和 Kelivo 等客户端对齐。route.headers 里显式配了同名头时以它为准。
+    session_header = str(route.get("session_header") or "").strip()
+    if session_header and session_id and session_header.lower() not in {str(k).lower() for k in req_headers}:
+        req_headers[session_header] = session_id
 
     text_parts: list[str] = []
     thinking_parts: list[str] = []
@@ -1804,7 +1823,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
         tried.append(route.get("model"))
         try:
             if all_tools:
-                return await _tool_loop(route, messages, all_tools, on_thinking=on_thinking, on_restart=on_restart, tried=tried, cancel_ev=cancel_ev)
+                return await _tool_loop(route, messages, all_tools, on_thinking=on_thinking, on_restart=on_restart, tried=tried, cancel_ev=cancel_ev, session_id=session_id)
             sink = None
             if emit_stream and STREAM_OUTPUT:
 
@@ -1817,7 +1836,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         "api_session": session_id,
                     })
 
-            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink, on_restart=on_restart, cancel_ev=cancel_ev)
+            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink, on_restart=on_restart, cancel_ev=cancel_ev, session_id=session_id)
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
@@ -1834,7 +1853,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     return {"text": "", "error": last_error or "all models failed", "tried": tried}
 
 
-async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, on_restart=None, tried: list[str], cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
+async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, on_restart=None, tried: list[str], cancel_ev: asyncio.Event | None = None, session_id: str = "") -> dict[str, Any]:
     """原生工具循环:模型出 tool_calls → 执行 MCP 工具 → 结果喂回,最多 8 轮。"""
     msgs = messages[:]
     first_thinking = None
@@ -1847,7 +1866,7 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
     executed: dict[str, str] = {}
     out: dict[str, Any] = {"text": "", "usage": {}}
     for round_idx in range(8):
-        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, on_restart=on_restart, cancel_ev=cancel_ev)
+        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, on_restart=on_restart, cancel_ev=cancel_ev, session_id=session_id)
         if round_idx == 0 and out.get("thinking"):
             first_thinking = out["thinking"]
         msg = out.get("message") or {}
