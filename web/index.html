@@ -2768,11 +2768,6 @@
             <input id="maxTokensAutoInput" type="checkbox" onchange="syncMaxTokensAuto(this)">
             <span>自动：不填数值，跟随当前模型默认上限（长文本 / MCP 调用推荐）</span>
           </label>
-          <div class="config-field-label">苏醒垫层（Warm Layer）<i class="info-i" title="默认关闭。开启后，新会话自动垫 handoff+feel+whisper，聊天空闲超过 15 分钟回来再补 feel+whisper，让他醒过来就带着温度。">i</i></div>
-          <label class="param-auto-row">
-            <input id="warmEnabledInput" type="checkbox">
-            <span>开启苏醒垫层（保存后，对之后的新消息生效）</span>
-          </label>
         </div>
         <div class="config-actions"><button class="config-action primary" id="modelParamsSaveBtn" type="button">保存参数</button></div>
         <div class="push-hint" id="modelParamsConfigHint">调完点「保存参数」，对之后的新消息生效</div>
@@ -3154,7 +3149,7 @@ const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), 
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
 const personaConfigView = $("#personaConfigView"), modelParamsConfigView = $("#modelParamsConfigView");
 const personaInput = $("#personaInput"), aiNameInput = $("#aiNameInput"), personaSaveBtn = $("#personaSaveBtn"), personaConfigHint = $("#personaConfigHint");
-const temperatureInput = $("#temperatureInput"), topPInput = $("#topPInput"), historyNInput = $("#historyNInput"), maxTokensInput = $("#maxTokensInput"), maxTokensAutoCheck = $("#maxTokensAutoInput"), warmEnabledInput = $("#warmEnabledInput"), modelParamsSaveBtn = $("#modelParamsSaveBtn"), modelParamsConfigHint = $("#modelParamsConfigHint");
+const temperatureInput = $("#temperatureInput"), topPInput = $("#topPInput"), historyNInput = $("#historyNInput"), maxTokensInput = $("#maxTokensInput"), maxTokensAutoCheck = $("#maxTokensAutoInput"), modelParamsSaveBtn = $("#modelParamsSaveBtn"), modelParamsConfigHint = $("#modelParamsConfigHint");
 const injectConfigView = $("#injectConfigView"), openInjectConfigBtn = $("#openInjectConfigBtn"), injectEnabledInput = $("#injectEnabledInput"), injectEntriesList = $("#injectEntriesList"), injectAddBtn = $("#injectAddBtn"), injectSaveBtn = $("#injectSaveBtn"), injectConfigHint = $("#injectConfigHint"), injectEntryStatus = $("#injectEntryStatus");
 const proactiveConfigView = $("#proactiveConfigView"), openProactiveConfigBtn = $("#openProactiveConfigBtn"), proactiveEnabledInput = $("#proactiveEnabledInput"), proactiveIdleInput = $("#proactiveIdleInput"), proactiveCooldownInput = $("#proactiveCooldownInput"), proactiveMaxDayInput = $("#proactiveMaxDayInput"), proactiveQuietEnabledInput = $("#proactiveQuietEnabledInput"), proactiveQuietStartInput = $("#proactiveQuietStartInput"), proactiveQuietEndInput = $("#proactiveQuietEndInput"), proactiveTzSelect = $("#proactiveTzSelect"), proactiveSaveBtn = $("#proactiveSaveBtn"), proactiveConfigHint = $("#proactiveConfigHint"), proactiveEntryStatus = $("#proactiveEntryStatus");
 const dataConfigView = $("#dataConfigView"), openDataConfigBtn = $("#openDataConfigBtn"), dataEntryStatus = $("#dataEntryStatus");
@@ -4693,8 +4688,7 @@ async function loadLoopConfig(){
     setParamSlider(topPInput, savedLoopConfig.top_p, "1.0");
     setParamSlider(historyNInput, savedLoopConfig.history_n, "24");
     applyMaxTokensConfig(savedLoopConfig.max_tokens);
-    if (warmEnabledInput) warmEnabledInput.checked = !!(savedLoopConfig && savedLoopConfig.warm_enabled);
-    
+
     resetMcpForm();
     renderApiList();
     renderMcpList();
@@ -4783,9 +4777,7 @@ async function loadModelParamsConfig(){
     setParamSlider($("#topPInput"), cfg.top_p, "1.0");
     setParamSlider($("#historyNInput"), cfg.history_n, "24");
     applyMaxTokensConfig(cfg.max_tokens);
-    if (warmEnabledInput) warmEnabledInput.checked = !!(cfg && cfg.warm_enabled);
-  }catch{}
-}
+  }catch{}}
 $("#openPersonaConfigBtn")?.addEventListener("click", () => { setConfigView("persona"); loadPersonaConfig(); });
 $("#openModelParamsBtn")?.addEventListener("click", () => { setConfigView("model-params"); loadModelParamsConfig(); });
 async function loadMemoryConfig(){
@@ -5217,7 +5209,6 @@ $("#modelParamsSaveBtn")?.addEventListener("click", async () => {
   if (!isNaN(histVal)) payload.history_n = histVal;
   if (maxTokensAutoCheck?.checked) payload.max_tokens = null;
   else if (!isNaN(maxtVal)) payload.max_tokens = maxtVal;
-  payload.warm_enabled = warmEnabledInput ? !!warmEnabledInput.checked : false;
   await saveLoopConfig(payload, hint);
 });
 document.querySelectorAll("[data-config-back]").forEach(button => button.addEventListener("click", () => setConfigView("hub")));

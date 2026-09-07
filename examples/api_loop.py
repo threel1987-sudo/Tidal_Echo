@@ -671,7 +671,7 @@ async def attachment_parts(atts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return parts
 
 
-def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None, warm_block: str = "") -> list[dict[str, Any]]:
+def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     system_text = persona()
     inj_on, inj_rows = injections()
     if inj_on and inj_rows:
@@ -686,8 +686,6 @@ def build_messages(text: str, *, before_id: int | None = None, session_id: str =
     presence_block = spatial_block()
     if presence_block:
         system_text += "\n\n" + presence_block
-    if warm_block:
-        system_text += warm_block
     messages = [{"role": "system", "content": system_text}]
     if use_context:
         for row in relay_rows(before_id, session_id, history_n()):
@@ -756,7 +754,6 @@ def public_config() -> dict[str, Any]:
         "temperature": cfg.get("temperature", TEMPERATURE),
         "top_p": cfg.get("top_p", None),
         "max_tokens": cfg.get("max_tokens", MAX_TOKENS),
-        "warm_enabled": bool(warm_cfg().get("enabled", False)),
         "injections": cfg.get("injections") or {"enabled": False, "entries": []},
         "presence": presence(),
         "rooms": rooms(),
@@ -817,11 +814,6 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 cfg["max_tokens"] = max(100, min(131072, int(v)))
             except Exception:
                 pass
-    if "warm_enabled" in body:
-        wl = cfg.get("warm_layer")
-        wl = dict(wl) if isinstance(wl, dict) else {}
-        wl["enabled"] = bool(body.get("warm_enabled"))
-        cfg["warm_layer"] = wl
     if "injections" in body:
         inj = body.get("injections")
         if isinstance(inj, dict):
@@ -1582,142 +1574,6 @@ async def mcp_tools() -> list[dict[str, Any]]:
     return tools
 
 
-# ── 苏醒垫层(warm layer) ──────────────────────────────────────────────────
-# 「刚醒时底下是空的」问题的解法:判定一次苏醒(新会话 = 本进程第一次见到该
-# session;或距上一条人类消息超过 idle_minutes),自动 breath 拉 feel/whisper
-# 通道(新会话再加 handoff),把结果作为【苏醒垫层】注入 system 上下文。
-# 只在上下文里,不落库、不在 PWA 显示、不占对话轮次;同一窗口内带缓存复用。
-
-_WARM_CACHE: dict[str, dict[str, Any]] = {}   # session_id -> {ts, text, handoff}
-_LAST_HUMAN_SEEN: dict[str, float] = {}       # session_id -> 最近一条人类消息的 epoch
-_WARM_LOCK = asyncio.Lock()
-_BRAIN_SERVER: dict[str, Any] | None = None   # 提供 breath 工具的 MCP server(带缓存)
-
-
-def warm_cfg() -> dict[str, Any]:
-    """苏醒垫层配置,全部有默认值,可在 loop_config 的 warm_layer 键微调。"""
-    cfg = load_config().get("warm_layer")
-    if not isinstance(cfg, dict):
-        cfg = {}
-    try:
-        return {
-            "enabled": bool(cfg.get("enabled", False)),
-            "idle_minutes": max(1, int(cfg.get("idle_minutes", 15))),
-            "max_tokens": max(200, int(cfg.get("max_tokens", 2000))),
-            "cache_minutes": max(10, int(cfg.get("cache_minutes", 30))),
-        }
-    except Exception:
-        return {"enabled": False, "idle_minutes": 15, "max_tokens": 2000, "cache_minutes": 30}
-
-
-async def _brain_server() -> dict[str, Any] | None:
-    """在已启用的 MCP server 里找提供 breath 工具的那个。"""
-    global _BRAIN_SERVER
-    if _BRAIN_SERVER is not None:
-        return _BRAIN_SERVER
-    for server in mcp_servers():
-        if not server["enabled"]:
-            continue
-        try:
-            result = await mcp_call(server, "tools/list")
-            names = {t.get("name") for t in result.get("tools", []) if isinstance(t, dict) and t.get("name")}
-            if "breath" in names:
-                _BRAIN_SERVER = server
-                return server
-        except Exception:
-            continue
-    return None
-
-
-async def _breath_text(server: dict[str, Any], **arguments: Any) -> str:
-    result = await mcp_call(server, "tools/call", {"name": "breath", "arguments": arguments})
-    if isinstance(result, dict) and result.get("isError"):
-        raise RuntimeError(f"breath returned isError: {str(result)[:200]}")
-    # result 是 jsonrpc envelope 的内层 result;正文在 content[].text 里
-    if isinstance(result, dict):
-        content = result.get("content")
-        if isinstance(content, list):
-            parts = [
-                str(item["text"])
-                for item in content
-                if isinstance(item, dict) and item.get("type") == "text" and str(item.get("text") or "").strip()
-            ]
-            if parts:
-                return "\n\n".join(parts)
-        sc = result.get("structuredContent")
-        if isinstance(sc, str) and sc.strip():
-            return sc
-    if isinstance(result, str):
-        return result
-    return ""
-
-
-async def warm_injection(session_id: str, *, is_new: bool) -> str:
-    """返回苏醒垫层文本(注入 system 用);失败或未启用时返回空串,绝不阻断回复。"""
-    cfg = warm_cfg()
-    if not cfg["enabled"]:
-        return ""
-    cached = _WARM_CACHE.get(session_id)
-    # 仅新会话复用缓存的 handoff 垫层(快速重连不重复跑 handoff);
-    # 超时苏醒每次都要重新拉新鲜的 feel+whisper,不复用旧垫层。
-    if cached and is_new and cached.get("handoff"):
-        age = time.time() - float(cached.get("ts") or 0)
-        if age < float(cfg["cache_minutes"]) * 60:
-            return str(cached.get("text") or "")
-    async with _WARM_LOCK:
-        cached = _WARM_CACHE.get(session_id)
-        if cached and is_new and cached.get("handoff"):
-            age = time.time() - float(cached.get("ts") or 0)
-            if age < float(cfg["cache_minutes"]) * 60:
-                return str(cached.get("text") or "")
-        server = await _brain_server()
-        if not server:
-            print("[api_loop:warm] 没有提供 breath 的 MCP server,跳过苏醒垫层")
-            return ""
-        async def one(args: dict[str, Any], title: str) -> str:
-            try:
-                t = await _breath_text(server, **args)
-                return t.strip()
-            except Exception as exc:
-                print(f"[api_loop:warm] breath({title}) failed: {type(exc).__name__}: {exc}")
-            return ""
-        jobs: list[tuple[dict[str, Any], str]] = []
-        if is_new:
-            jobs.append(({"mode": "handoff", "max_tokens": cfg["max_tokens"]}, "新窗口交接(handoff)"))
-        jobs.append(({"domain": "feel", "is_session_start": True, "max_tokens": cfg["max_tokens"]}, "此刻心绪(feel)"))
-        jobs.append(({"domain": "whisper", "is_session_start": True, "max_tokens": cfg["max_tokens"]}, "悄悄话(whisper)"))
-        raws = await asyncio.gather(*(one(a, t) for a, t in jobs))
-        titles = [t for _, t in jobs]
-        blocks: list[str] = []
-        for raw, title in zip(raws, titles):
-            if raw:
-                blocks.append(f"【{title}】\n{raw}")
-        # feel/whisper 数据双标(whisper 桶 = type=feel + whisper 标)导致两边内容
-        # 完全相同时,去掉 whisper 块,避免同一批桶重复垫进上下文
-        dedup = len(raws) >= 2 and bool(raws[-1]) and raws[-1] == raws[-2]
-        if dedup:
-            blocks = [b for b in blocks if not b.startswith("【悄悄话(whisper)】")]
-        if not blocks:
-            return ""
-        text = (
-            "\n\n苏醒垫层(记忆系统自动注入的你自己的内心内容:你的真实记忆与感受。"
-            "读进心里,按它们所呈现的你来活着、说话。不要复述、不要引用出处):\n\n"
-            + "\n\n".join(blocks)
-        )
-        _WARM_CACHE[session_id] = {"ts": time.time(), "text": text, "handoff": bool(is_new)}
-        if len(_WARM_CACHE) > 32:
-            oldest = min(_WARM_CACHE, key=lambda k: float(_WARM_CACHE[k]["ts"]))
-            _WARM_CACHE.pop(oldest, None)
-        if len(_LAST_HUMAN_SEEN) > 64:
-            for k in list(_LAST_HUMAN_SEEN)[:16]:
-                _LAST_HUMAN_SEEN.pop(k, None)
-        kind = "handoff+feel+whisper" if is_new else "feel+whisper"
-        if dedup:
-            kind = kind.replace("+whisper", "(whisper与feel重复,已去重)")
-        print(f"[api_loop:warm] 苏醒垫层已注入({kind}, {len(text)} chars, session={session_id or '(无会话)'})")
-        return text
-
-
 async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     # 消毒名字优先走映射表(服务名/工具名可能都含中文);没有映射再退回旧前缀解析。
     # 文本协议工具调用里模型常直接叫「裸工具名」(如 breath),再退回原始名反查表兜底。
@@ -1938,18 +1794,11 @@ async def _proactive_step() -> None:
     if int(stats["today_count"]) >= int(cfg["max_per_day"]):
         return
     session_id = active_session_id()
-    # 主动唤醒也垫 feel+whisper(不是新会话,不跑 handoff),让他开口就是热的
-    warm_block = ""
-    try:
-        warm_block = await warm_injection(session_id, is_new=False)
-    except Exception as exc:
-        print(f"[api_loop:proactive] warm layer failed: {type(exc).__name__}: {exc}")
     messages = build_messages(
         _proactive_trigger(now_local, idle_hours),
         before_id=None,
         session_id=session_id,
         use_context=True,
-        warm_block=warm_block,
     )
     try:
         out = await run_model(messages, session_id=session_id, emit_stream=False)
@@ -2012,21 +1861,7 @@ async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: 
 async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *, dry: bool, attachments: list[dict[str, Any]] | None, stream_id: str, cancel_ev: asyncio.Event | None) -> dict[str, Any]:
     atts = [a for a in (attachments or []) if isinstance(a, dict)]
     image_parts = await attachment_parts(atts)
-    # ── 苏醒垫层判定:首次见到的会话 = 新会话(handoff+feel+whisper);
-    #    距上一条人类消息超过 idle_minutes = 超时苏醒(只补 feel+whisper) ──
-    now_epoch = time.time()
-    last_seen = _LAST_HUMAN_SEEN.get(session_id)
-    is_new_session = last_seen is None
-    _LAST_HUMAN_SEEN[session_id] = now_epoch
-    wcfg = warm_cfg()
-    wake = (not dry) and bool(wcfg["enabled"]) and (
-        is_new_session or (last_seen is not None and (now_epoch - last_seen) >= float(wcfg["idle_minutes"]) * 60)
-    )
-    warm_block = ""
-    if wake:
-        warm_block = await warm_injection(session_id, is_new=is_new_session)
-    
-    messages = build_messages(text, before_id=msg_id, session_id=session_id, use_context=True, image_parts=image_parts or None, warm_block=warm_block)
+    messages = build_messages(text, before_id=msg_id, session_id=session_id, use_context=True, image_parts=image_parts or None)
     thinking_stream: _DeltaEmitter | None = None
     if (not dry) and STREAM_OUTPUT:
         thinking_stream = _DeltaEmitter(stream_id, session_id, kind="thinking")
@@ -2084,7 +1919,7 @@ async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *
     if cancelled:
         return {"ok": True, "cancelled": True, "api": {"runtime": "api_loop", "session": session_id}}
     if image_parts and not (out.get("text") or "").strip():
-        fb = build_messages(text, before_id=msg_id, session_id=session_id, use_context=True, image_parts=None, warm_block=warm_block)
+        fb = build_messages(text, before_id=msg_id, session_id=session_id, use_context=True, image_parts=None)
         if atts:
             note = "（用户发来图片或文件附件，但当前模型没有正确接收到图片内容，请告知用户这一点。）"
             last_content = str(fb[-1].get("content") or "") if fb else ""
