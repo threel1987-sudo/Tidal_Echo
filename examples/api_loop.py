@@ -1345,7 +1345,11 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     # 之后的 tool_calls 也当重生,会连工具名一起清掉,工具调用被静默丢弃
                     # (表现为 has_tool_calls 恒为 False)。所以这里只认 finish_reason 后又来了
                     # 新的正文/思考才算重生;光来了工具调用不算。
-                    if (n["role"] and (text_parts or thinking_parts)) or \
+                    # 但 role 重发必须连 tool_calls_buf 一起看:若第一代只吐了工具调用
+                    # (无正文无思考),网关流内重发 role 时旧守卫完全看不见,同一次调用会在
+                    # buf 里累积两份 → 工具被执行两次、PWA 折叠块出现重复。role 重发一律
+                    # 视为新一代(正规网关一条流只发一次 role,重发即重试)。
+                    if (n["role"] and (text_parts or thinking_parts or tool_calls_buf)) or \
                        (saw_finish and (n["content"] or n["thinking"])):
                         restart_count += 1
                         text_parts.clear()
@@ -1835,6 +1839,12 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
     msgs = messages[:]
     first_thinking = None
     collected: list[dict[str, Any]] = []
+    # 同一次工具循环内「工具名+参数」完全相同的调用只执行一次:
+    # 覆盖三种重复来源——① 流内重发把同一 tool_call 累积两份;② 模型单轮并发
+    # 重复调用;③ 模型下一轮原样再调(结果就在上下文里)。重复调用直接回填首次
+    # 结果,协议上仍给每个 tool_call_id 回 tool 消息,但不再重复打 MCP、也不再
+    # 往 collected 里加第二条,PWA 折叠块就不会出现两次同样的内容。
+    executed: dict[str, str] = {}
     out: dict[str, Any] = {"text": "", "usage": {}}
     for round_idx in range(8):
         out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, on_restart=on_restart, cancel_ev=cancel_ev)
@@ -1856,12 +1866,24 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
             tool_name = str(fn.get("name") or "")
             try:
                 args = json.loads(fn.get("arguments") or "{}")
-                result = await execute_mcp_tool(tool_name, args)
-                content = json.dumps(result, ensure_ascii=False)
-                collected.append(_tool_call_entry(tool_name, args, mcp_result_text(result)))
-            except Exception as exc:
-                content = json.dumps({"error": str(exc)}, ensure_ascii=False)
-                collected.append(_tool_call_entry(tool_name, args, {"error": str(exc)}, status="error"))
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            try:
+                signature = tool_name + "\n" + json.dumps(args, ensure_ascii=False, sort_keys=True)
+            except (TypeError, ValueError):
+                signature = tool_name + "\n" + str(fn.get("arguments") or "")
+            if signature in executed:
+                content = executed[signature]
+                print(f"[api_loop:tool_loop] duplicate call skipped (reusing first result): {tool_name}")
+            else:
+                try:
+                    result = await execute_mcp_tool(tool_name, args)
+                    content = json.dumps(result, ensure_ascii=False)
+                    collected.append(_tool_call_entry(tool_name, args, mcp_result_text(result)))
+                except Exception as exc:
+                    content = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                    collected.append(_tool_call_entry(tool_name, args, {"error": str(exc)}, status="error"))
+                executed[signature] = content
             msgs.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": content})
     if collected:
         out["tool_calls"] = collected
