@@ -2691,6 +2691,8 @@
           <input id="apiModelInput" type="text" placeholder="模型名称，例如 gpt-4o" autocomplete="off">
           <div class="config-field-label">自定义 Headers（可选，每行一条 key=value）</div>
           <textarea id="apiHeadersInput" class="config-textarea" rows="2" placeholder="X-Api-Key=sk-xxx&#10;Authorization=Bearer xxx" autocomplete="off" spellcheck="false"></textarea>
+          <div class="config-field-label">会话头名（可选，只填头名，不要写 =值；每个聊天窗口会自动填入自己的会话 ID）</div>
+          <input id="apiSessionHeaderInput" type="text" placeholder="接 Ombre-Brain gateway 填 X-Ombre-Session-Id" autocomplete="off" spellcheck="false">
         </div>
         <div class="config-actions"><button class="config-action primary" id="apiSaveBtn" type="button">添加 API 路由</button></div>
         <div class="push-hint" id="apiConfigHint"></div>
@@ -3146,7 +3148,7 @@ const statusCopy = $("#statusCopy"), statusSidEl = $("#statusSid"), statusUsedEl
 const sessionBtn = $("#sessionBtn"), sessionPop = $("#sessionPop"), sessionList = $("#sessionList"), sessionNewBtn = $("#sessionNewBtn");
 const terminalBtn = $("#terminalBtn"), terminalPanel = $("#terminalPanel"), terminalBack = $("#terminalBack"), terminalLog = $("#terminalLog"), terminalForm = $("#terminalForm"), terminalInput = $("#terminalInput"), terminalSession = $("#terminalSession");
 const brainHint = $("#brainHint");
-const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiHeadersInput = $("#apiHeadersInput"), apiSaveBtn = $("#apiSaveBtn"), apiDebugBtn = $("#apiDebugBtn"), apiDebugOutput = $("#apiDebugOutput"), apiConfigHint = $("#apiConfigHint");
+const apiUrlInput = $("#apiUrlInput"), apiKeyInput = $("#apiKeyInput"), apiModelInput = $("#apiModelInput"), apiHeadersInput = $("#apiHeadersInput"), apiSessionHeaderInput = $("#apiSessionHeaderInput"), apiSaveBtn = $("#apiSaveBtn"), apiDebugBtn = $("#apiDebugBtn"), apiDebugOutput = $("#apiDebugOutput"), apiConfigHint = $("#apiConfigHint");
 const mcpNameInput = $("#mcpNameInput"), mcpUrlInput = $("#mcpUrlInput"), mcpTokenInput = $("#mcpTokenInput"), mcpEnabledInput = $("#mcpEnabledInput"), mcpSaveBtn = $("#mcpSaveBtn"), mcpDebugBtn = $("#mcpDebugBtn"), mcpToolCallBtn = $("#mcpToolCallBtn"), mcpDebugOutput = $("#mcpDebugOutput"), mcpConfigHint = $("#mcpConfigHint");
 const configHubView = $("#configHubView"), apiConfigView = $("#apiConfigView"), mcpConfigView = $("#mcpConfigView"), apiList = $("#apiList"), mcpList = $("#mcpList");
 const openApiConfigBtn = $("#openApiConfigBtn"), openMcpConfigBtn = $("#openMcpConfigBtn"), apiEntryStatus = $("#apiEntryStatus"), mcpEntryStatus = $("#mcpEntryStatus");
@@ -4505,6 +4507,7 @@ function resetApiForm(){
   if (apiKeyInput) apiKeyInput.value = "";
   if (apiModelInput) apiModelInput.value = "";
   if (apiHeadersInput) apiHeadersInput.value = "";
+  if (apiSessionHeaderInput) apiSessionHeaderInput.value = "";
   if (apiSaveBtn) apiSaveBtn.textContent = "添加 API 路由";
 }
 function renderMcpList(){
@@ -4679,6 +4682,7 @@ async function loadLoopConfig(){
     } else if (apiHeadersInput) {
       apiHeadersInput.value = "";
     }
+    if (apiSessionHeaderInput) apiSessionHeaderInput.value = route.session_header || "";
     if (apiConfigHint) apiConfigHint.textContent = route.key_masked ? `已配置 Key：${route.key_masked}` : "尚未配置 API";
     if (mcpConfigHint) mcpConfigHint.textContent = "MCP Token 仅在输入时更新，留空保持原 Token";
     
@@ -5239,6 +5243,8 @@ if (apiSaveBtn) apiSaveBtn.addEventListener("click", async () => {
     }
   }
   entry.headers = h;
+  // 会话头名:始终随表单提交(留空 = 显式清除;后端对未传此字段的旧客户端才继承旧值)
+  entry.session_header = apiSessionHeaderInput ? apiSessionHeaderInput.value.trim() : "";
   const position = editingApiIndex !== null ? current.findIndex(r => r.index === editingApiIndex) : -1;
   if (position >= 0) current[position] = entry; else current.push(entry);
   const saved = await saveLoopConfig({ main_chain: current.map((r, i) => ({ ...r, index: i, key: i === (position >= 0 ? position : current.length - 1) ? entry.key : "" })) }, apiConfigHint);
@@ -5265,6 +5271,7 @@ if (apiList) apiList.addEventListener("click", async (e) => {
       const h = route.headers || {};
       apiHeadersInput.value = Object.keys(h).map(k => `${k}=${h[k]}`).join("\n");
     }
+    if (apiSessionHeaderInput) apiSessionHeaderInput.value = route.session_header || "";
     if (apiSaveBtn) apiSaveBtn.textContent = "保存修改";
     if (apiConfigFields) apiConfigFields.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } else if (action === "delete") {
