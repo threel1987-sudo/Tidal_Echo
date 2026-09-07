@@ -1238,12 +1238,17 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
             else:
                 req_body.pop("tools", None)
                 req_body.pop("tool_choice", None)
+            if debug_stream:
+                _tnames = [str((t.get("function") or {}).get("name") or "") for t in (cur_tools or [])]
+                print(f"[api_loop:debug] POST attempt={attempt_no} tool_count={len(_tnames)} tool_names={_tnames[:30]}")
             async with client.stream(
                 "POST",
                 url,
                 headers=req_headers,
                 json=req_body,
             ) as resp:
+                if debug_stream:
+                    print(f"[api_loop:debug] HTTP {resp.status_code}")
                 if resp.status_code >= 400:
                     err_detail = ""
                     try:
@@ -1252,7 +1257,7 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     except Exception:
                         err_detail = str(resp.status_code)
                     if cur_tools and resp.status_code in (400, 404, 422):
-                        print(f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only")
+                        print(f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only; detail={err_detail[:300]!r}")
                         continue
                     raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
                 saw_finish = False
@@ -1261,6 +1266,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     if cancel_ev is not None and cancel_ev.is_set():
                         raise _GenerationCancelled()
                     line = line.strip()
+                    if debug_stream:
+                        print(f"[api_loop:debug] RAW |{line[:1500]}")
                     if not line.startswith("data:"):
                         continue
                     data_str = line[5:].strip()
@@ -1320,6 +1327,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                             except Exception:
                                 pass
                     if n["tool_calls"]:
+                        if debug_stream:
+                            print(f"[api_loop:debug] TOOL_DELTA |{n['tool_calls']}")
                         accumulate_tool_calls(tool_calls_buf, n["tool_calls"])
 
     merged_thinking = merge_thinking(thinking_parts)
@@ -1710,6 +1719,8 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     tried = []
     last_error = ""
     all_tools = await mcp_tools()
+    if all_tools:
+        print(f"[api_loop:tools] {len(all_tools)} tools → tool_loop: {[t['function']['name'] for t in all_tools][:30]}")
     if cancel_ev is not None and cancel_ev.is_set():
         raise _GenerationCancelled()
     for route in main_chain():
@@ -1760,6 +1771,8 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
         calls = msg.get("tool_calls") or []
         if not calls and isinstance(msg.get("function_call"), dict):
             calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
+        if calls:
+            print(f"[api_loop:tool_loop] round={round_idx} received {len(calls)} tool_calls: {[c.get('function', {}).get('name') for c in calls]}")
         if not calls:
             break
         msgs.append(msg)
