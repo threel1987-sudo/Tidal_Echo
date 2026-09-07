@@ -1228,6 +1228,7 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     # 兼容性:带 tools 时最多试两次 —— 第一次全量;若网关不认 OpenAI 格式工具
     # (Anthropic 中转的转换层常在此崩溃),第二次摘掉 tools 纯文本重试,聊天永远不断。
     attempts = [tools, None] if tools else [None]
+    debug_stream = os.environ.get("LOOP_DEBUG_STREAM", "") not in ("", "0", "false", "False")
     async with httpx.AsyncClient(timeout=client_timeout, trust_env=False) as client:
         for attempt_no, cur_tools in enumerate(attempts):
             req_body = dict(body)
