@@ -18,6 +18,11 @@
 # API — reverse proxy to the relay. SSE-friendly: no buffering, long timeouts.
 location /relay/ {
     client_max_body_size 10m;                 # must be >= RELAY_MAX_UPLOAD_BYTES
+    # SECURITY: attachments and EventSource authenticate via ?token=<RELAY_SECRET>
+    # (browsers can't set headers on <img>/EventSource). The default access log
+    # records the full query string — i.e. your master key in plaintext. Disable
+    # access logging for this block (or use a log_format without $query_string).
+    access_log off;
     proxy_pass http://127.0.0.1:3011/;        # trailing slash strips the /relay/ prefix
     proxy_http_version 1.1;
     proxy_set_header Host $host;

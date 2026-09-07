@@ -18,7 +18,9 @@ python /app/examples/home_state_mcp.py &
 mcp_pid=$!
 
 cd /app/backend
-uvicorn app:app --host 0.0.0.0 --port "$RELAY_PORT" &
+# --no-access-log: attachment/SSE URLs carry ?token=<RELAY_SECRET>;
+# uvicorn's access log would persist the master key in plaintext logs.
+uvicorn app:app --host 0.0.0.0 --port "$RELAY_PORT" --no-access-log &
 relay_pid=$!
 
 cleanup() {

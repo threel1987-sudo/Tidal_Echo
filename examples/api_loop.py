@@ -875,6 +875,7 @@ def update_config(body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=400, detail=f"MCP row {pos + 1}: url required")
             new_servers.append(entry)
         cfg["mcp_servers"] = new_servers
+        _MCP_TOOLS_CACHE["ts"] = 0.0   # 服务/工具可见性变了,立刻作废工具列表缓存
     if isinstance(body.get("presence"), dict):
         p = body["presence"]
         # 先继承已有值,否则前后端只发部分字段(如仅 scenario)会误清 room
@@ -1550,28 +1551,51 @@ def tool_public_name(server_name: str, raw_name: str) -> str:
     return (f"mcp_{seg}_{raw}")[:64]
 
 
+_MCP_TOOLS_CACHE: dict[str, Any] = {"ts": 0.0, "tools": []}
+_MCP_TOOLS_LOCK = asyncio.Lock()
+MCP_TOOLS_TTL = float(os.environ.get("MCP_TOOLS_TTL", "300"))  # 工具列表缓存秒数
+
+
 async def mcp_tools() -> list[dict[str, Any]]:
-    tools = []
-    _TOOL_NAME_MAP.clear()   # 每次重建映射;消毒名字按确定性规则生成,老映射会被覆盖
-    _TOOL_RAW_MAP.clear()    # 原始名反查表同步重建(供文本协议直接叫裸工具名时反解)
-    for server in mcp_servers():
-        if not server["enabled"]:
-            continue
-        disabled = set(server.get("disabled_tools") or [])
-        try:
-            result = await mcp_call(server, "tools/list")
-            for tool in result.get("tools", []):
-                if isinstance(tool, dict) and tool.get("name"):
-                    raw_name = str(tool["name"])
-                    if raw_name in disabled:
-                        continue
-                    public_name = tool_public_name(server["name"], raw_name)
-                    _TOOL_NAME_MAP[public_name] = (server["name"], raw_name)
-                    _TOOL_RAW_MAP[raw_name] = (server["name"], raw_name)
-                    tools.append({"type": "function", "function": {"name": public_name, "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
-        except Exception:
-            continue
-    return tools
+    # 每条消息都全量握手 tools/list 会白等一次往返(感知延迟);且
+    # _TOOL_NAME_MAP/_TOOL_RAW_MAP 是全局表,并发请求(用户消息撞上主动消息)
+    # 会互相踩到重建一半的状态 → 工具名映射丢失、调用报「not configured」。
+    # TTL 缓存 + 锁:窗口内直接复用;过期重建时并发方只等同一份结果;
+    # 映射先建局部表再整体换入,不存在半截状态。配置变更见 update_config 的失效。
+    now = time.time()
+    if _MCP_TOOLS_CACHE["tools"] and now - _MCP_TOOLS_CACHE["ts"] < MCP_TOOLS_TTL:
+        return _MCP_TOOLS_CACHE["tools"]
+    async with _MCP_TOOLS_LOCK:
+        now = time.time()
+        if _MCP_TOOLS_CACHE["tools"] and now - _MCP_TOOLS_CACHE["ts"] < MCP_TOOLS_TTL:
+            return _MCP_TOOLS_CACHE["tools"]
+        tools = []
+        name_map: dict[str, tuple[str, str]] = {}
+        raw_map: dict[str, tuple[str, str]] = {}
+        for server in mcp_servers():
+            if not server["enabled"]:
+                continue
+            disabled = set(server.get("disabled_tools") or [])
+            try:
+                result = await mcp_call(server, "tools/list")
+                for tool in result.get("tools", []):
+                    if isinstance(tool, dict) and tool.get("name"):
+                        raw_name = str(tool["name"])
+                        if raw_name in disabled:
+                            continue
+                        public_name = tool_public_name(server["name"], raw_name)
+                        name_map[public_name] = (server["name"], raw_name)
+                        raw_map[raw_name] = (server["name"], raw_name)
+                        tools.append({"type": "function", "function": {"name": public_name, "description": tool.get("description", ""), "parameters": tool.get("inputSchema") or {"type": "object"}}})
+            except Exception:
+                continue
+        _TOOL_NAME_MAP.clear()
+        _TOOL_NAME_MAP.update(name_map)
+        _TOOL_RAW_MAP.clear()
+        _TOOL_RAW_MAP.update(raw_map)
+        _MCP_TOOLS_CACHE["tools"] = tools
+        _MCP_TOOLS_CACHE["ts"] = time.time()
+        return tools
 
 
 async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:

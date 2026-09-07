@@ -9,7 +9,9 @@ After=network.target
 Type=simple
 WorkingDirectory=/root/companion-relay
 EnvironmentFile=/root/companion-relay/relay.env
-ExecStart=/root/companion-relay/venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 3011 --timeout-graceful-shutdown 3
+# --no-access-log: attachment/SSE URLs carry ?token=<RELAY_SECRET>; uvicorn's
+# access log would persist the master key in plaintext journald/syslog.
+ExecStart=/root/companion-relay/venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 3011 --timeout-graceful-shutdown 3 --no-access-log
 Restart=always
 TimeoutStopSec=10
 RestartSec=3

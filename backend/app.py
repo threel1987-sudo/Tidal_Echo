@@ -372,6 +372,7 @@ plugin_subs: set[asyncio.Queue] = set()  # AI side    (GET /channel/in)
 app_subs: set[asyncio.Queue] = set()     # human side (GET /app/stream)
 stream_drafts: dict[tuple[str, str], dict] = {}
 cancelled_streams: dict[tuple[str, str], float] = {}  # (stream_id, kind) -> stop ts: late deltas after "stop" are dropped
+completed_streams: dict[tuple[str, str], dict] = {}   # (stream_id, kind) -> {ts, result}: done 帧幂等,重试/补发不再二次落库
 pending_loop_streams: dict[str, float] = {}           # stream_id -> created ts (relay-generated ids handed to /loop/ingest)
 
 
@@ -380,7 +381,19 @@ async def broadcast(subs: set, payload: dict) -> None:
         try:
             q.put_nowait(payload)
         except asyncio.QueueFull:
-            subs.discard(q)  # slow/dead consumer — drop it
+            # 慢/死连接:摘除以必须先确保它能收到哨兵(None)。若只摘除,生成器
+            # 本身还活着——q.get() 每 15s 超时后照常发心跳,客户端看门狗以为
+            # 「在线」却永远收不到消息(假活)。队列已满就丢一条最老的腾位置,
+            # 哨兵让 sse_stream 主动断开,客户端走 retry 重连。
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                q.put_nowait(None)
+            except asyncio.QueueFull:
+                pass
+            subs.discard(q)
 
 
 def app_payload(msg: dict) -> dict:
@@ -463,6 +476,8 @@ def prune_stream_drafts() -> None:
         stream_drafts.pop(k, None)
     for k in [k for k, ts in cancelled_streams.items() if now - ts > STREAM_DRAFT_TTL]:
         cancelled_streams.pop(k, None)
+    for k in [k for k, v in completed_streams.items() if now - float(v.get("ts") or 0) > STREAM_DRAFT_TTL]:
+        completed_streams.pop(k, None)
     for k in [k for k, ts in pending_loop_streams.items() if now - ts > STREAM_DRAFT_TTL]:
         pending_loop_streams.pop(k, None)
 
@@ -486,6 +501,13 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
     if key in cancelled_streams:
         # user tapped "stop" → late deltas must neither resurrect a bubble nor hit the db
         return {"ok": True, "stream_id": stream_id, "cancelled": True}
+    completed = completed_streams.get(key)
+    if completed is not None:
+        # done 幂等:同一 (stream_id,kind) 已完成后再到的 done(重试/超时补发)或
+        # 迟到增量,直接回首次结果,不再二次落库——否则用户会看到双重回复。
+        result = dict(completed.get("result") or {"ok": True, "stream_id": stream_id})
+        result["deduped"] = True
+        return result
     prune_stream_drafts()
 
     now_ts = datetime.now(timezone.utc).timestamp()
@@ -514,7 +536,9 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
     text = draft.get("text") or ""
     stream_drafts.pop(key, None)
     if not text:
-        return {"ok": True, "stream_id": stream_id, "saved": False}
+        result = {"ok": True, "stream_id": stream_id, "saved": False}
+        completed_streams[key] = {"ts": now_ts, "result": result}
+        return result
     msg = save_message("out", base_kind, text, dict(draft.get("meta") or {}))
     await broadcast(app_subs, {"type": "typing", "active": False})
     await broadcast(app_subs, app_payload(msg))
@@ -523,7 +547,9 @@ async def handle_stream_delta(kind: str, body: dict) -> dict:
             await push_to_all(notification_from_message(msg))
         except Exception:
             pass
-    return {"id": msg["id"], "stream_id": stream_id, "saved": True}
+    result = {"id": msg["id"], "stream_id": stream_id, "saved": True}
+    completed_streams[key] = {"ts": now_ts, "result": result}
+    return result
 
 
 def loop_base_url() -> str:
@@ -548,6 +574,12 @@ def loop_json(path: str, method: str = "GET", body=None):
         raise HTTPException(status_code=exc.code, detail=detail)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"loop proxy error: {exc}")
+
+
+async def loop_json_async(path: str, method: str = "GET", body=None):
+    # loop_json 是同步 urllib(timeout 最长 120s),直接在 async 端点里调用会冻结
+    # 整个事件循环(SSE 心跳停发 → 客户端集体重连 → 雪崩);统一丢线程池。
+    return await asyncio.to_thread(loop_json, path, method, body)
 
 
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -670,18 +702,25 @@ def sse_ping() -> str:
     return "event: ping\n" + sse_data(payload)
 
 
-async def sse_stream(subs: set, request: Request, initial: list[dict] | None = None):
+async def sse_stream(subs: set, request: Request, initial=None):
     q: asyncio.Queue = asyncio.Queue(maxsize=1000)
     subs.add(q)
     try:
         yield "retry: 3000\n: connected\n\n"
-        for payload in initial or []:
+        # initial 可传 callable:在 subs.add(q) 之后再取历史补发。若历史在端点
+        # 函数里先查好、队列注册却要等生成器首次迭代,两者之间到达的消息会两头
+        # 落空(不在 backlog 里,也没进队列)——重连瞬间丢一条。后补可能重复,
+        # 由客户端按消息 id 去重。
+        init = initial() if callable(initial) else initial
+        for payload in init or []:
             yield sse_data(payload)
         while True:
             if await request.is_disconnected():
                 break
             try:
                 payload = await asyncio.wait_for(q.get(), timeout=15)
+                if payload is None:
+                    break  # 被 broadcast 判死的慢连接:断开,让客户端干净重连
                 yield sse_data(payload)
             except asyncio.TimeoutError:
                 yield sse_ping()  # keep the connection alive and let clients watchdog it
@@ -743,8 +782,12 @@ async def healthz():
 async def channel_in(request: Request, since: int = 0, limit: int = 100):
     """SSE stream the plugin holds open. The human's messages get pushed down here."""
     check_auth(request)
-    backlog = [plugin_payload(m) for m in inbound_history(since, min(limit, 500))]
-    return StreamingResponse(sse_stream(plugin_subs, request, backlog), media_type="text/event-stream", headers=SSE_HEADERS)
+    # backlog 延迟到队列注册之后再查(见 sse_stream),堵住重连竞态窗口
+    return StreamingResponse(
+        sse_stream(plugin_subs, request, lambda: [plugin_payload(m) for m in inbound_history(since, min(limit, 500))]),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
 
 
 @app.post("/channel/out")
@@ -826,6 +869,17 @@ async def app_upload(request: Request, name: str = "file"):
     return save_upload_bytes(data, name, mime, "att")
 
 
+# 只允许这些扩展名内联渲染(图片/音频/视频/纯文本)。其余一律强制下载:
+# .html/.svg/.xml/pdf 等若按原类型从本域吐回,内嵌脚本会在与 PWA 相同的
+# origin 下执行,直接读到前端存的 RELAY_SECRET——存储型 XSS 口子。
+INLINE_UPLOAD_EXTS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".ico",
+    ".mp3", ".m4a", ".ogg", ".wav", ".flac",
+    ".mp4", ".webm", ".mov",
+    ".txt", ".md",
+}
+
+
 @app.get("/uploads/{name}")
 async def uploads(request: Request, name: str):
     check_auth(request)
@@ -833,7 +887,9 @@ async def uploads(request: Request, name: str):
     path = UPLOAD_DIR / safe
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="not found")
-    return FileResponse(path)
+    if path.suffix.lower() in INLINE_UPLOAD_EXTS:
+        return FileResponse(path)
+    return FileResponse(path, content_disposition_type="attachment", filename=safe)
 
 
 @app.post("/app/voice")
@@ -866,7 +922,7 @@ async def app_voice(request: Request):
     upload = save_upload_bytes(data, request.query_params.get("name", "voice.webm"), mime, "voice")
     stored = Path(upload["url"]).name
     local_audio = UPLOAD_DIR / stored
-    transcript = transcribe_with_command(local_audio, mime)
+    transcript = await asyncio.to_thread(transcribe_with_command, local_audio, mime)
     text = ("🎤 " + transcript) if transcript else f"🎤 [语音] {HUMAN_NAME}发来一段语音；当前 relay 未配置 ASR，音频已作为附件送达。"
     meta = {
         "user": "human",
@@ -908,7 +964,7 @@ async def app_tts(request: Request):
     """Generate MiniMax speech for an AI reply. The frontend falls back if unavailable."""
     check_auth(request)
     body = await request.json()
-    audio = minimax_tts_mp3(body.get("text") or "")
+    audio = await asyncio.to_thread(minimax_tts_mp3, body.get("text") or "")
     return Response(
         content=audio,
         media_type="audio/mpeg",
@@ -1169,31 +1225,31 @@ async def set_brain(request: Request):
 @app.get("/app/loop_config")
 async def get_loop_config(request: Request):
     check_auth(request)
-    return loop_json("/loop/config")
+    return await loop_json_async("/loop/config")
 
 
 @app.post("/app/loop_config")
 async def set_loop_config(request: Request):
     check_auth(request)
-    return loop_json("/loop/config", method="POST", body=await request.json())
+    return await loop_json_async("/loop/config", method="POST", body=await request.json())
 
 
 @app.post("/app/debug-chat")
 async def app_debug_chat(request: Request):
     check_auth(request)
-    return loop_json("/loop/debug-chat", method="POST", body=await request.json())
+    return await loop_json_async("/loop/debug-chat", method="POST", body=await request.json())
 
 
 @app.get("/app/debug-mcp")
 async def app_debug_mcp(request: Request):
     check_auth(request)
-    return loop_json("/loop/debug-mcp")
+    return await loop_json_async("/loop/debug-mcp")
 
 
 @app.get("/app/sessions")
 async def app_sessions(request: Request):
     check_auth(request)
-    return loop_json("/loop/sessions")
+    return await loop_json_async("/loop/sessions")
 
 
 @app.post("/app/sessions")
@@ -1207,19 +1263,19 @@ async def app_sessions_create(request: Request):
                 body["since_id"] = int(row["id"] or 0)
         except Exception:
             body["since_id"] = 0
-    return loop_json("/loop/sessions", method="POST", body=body)
+    return await loop_json_async("/loop/sessions", method="POST", body=body)
 
 
 @app.patch("/app/sessions/{session_id}")
 async def app_sessions_patch(session_id: str, request: Request):
     check_auth(request)
-    return loop_json(f"/loop/sessions/{urllib.parse.quote(session_id)}", method="PATCH", body=await request.json())
+    return await loop_json_async(f"/loop/sessions/{urllib.parse.quote(session_id)}", method="PATCH", body=await request.json())
 
 
 @app.delete("/app/sessions/{session_id}")
 async def app_sessions_delete(session_id: str, request: Request):
     check_auth(request)
-    return loop_json(f"/loop/sessions/{urllib.parse.quote(session_id)}", method="DELETE")
+    return await loop_json_async(f"/loop/sessions/{urllib.parse.quote(session_id)}", method="DELETE")
 
 
 def clear_session_messages(session_id: str) -> int:
