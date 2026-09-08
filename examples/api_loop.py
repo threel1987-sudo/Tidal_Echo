@@ -205,7 +205,7 @@ PROACTIVE_DEFAULTS: dict[str, Any] = {
 }
 
 PROACTIVE_CHECK_SECONDS = 60
-_PROACTIVE_BACKOFF: dict[str, Any] = {"until": 0.0, "note": ""}
+_PROACTIVE_BACKOFF: dict[str, Any] = {"until": 0.0, "note": "", "skips": 0}
 
 
 def proactive_cfg() -> dict[str, Any]:
@@ -270,7 +270,7 @@ def proactive_db_stats() -> dict[str, Any]:
         start_local = local_now().replace(hour=0, minute=0, second=0, microsecond=0)
         start_utc = start_local.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
         rows = _db_fetch(
-            "SELECT COUNT(*) AS n FROM messages WHERE json_extract(meta, '$.proactive') = 1 AND ts >= ?",
+            "SELECT COUNT(*) AS n FROM messages WHERE direction = 'out' AND json_extract(meta, '$.proactive') = 1 AND ts >= ?",
             (start_utc,),
         )
         if rows:
@@ -332,6 +332,17 @@ def _proactive_trigger(now_local: dt.datetime, idle_hours: float) -> str:
 def _backoff(seconds: float, note: str) -> None:
     _PROACTIVE_BACKOFF["until"] = time.time() + seconds
     _PROACTIVE_BACKOFF["note"] = note
+
+
+def _skip_backoff(note: str) -> None:
+    """连续「没话可说」阶梯退避:30m → 1h → 2h → 4h 封顶。
+    用户沉默一整天时,扁平 30 分钟退避会让调度器每半小时做一次全量上下文
+    LLM 调用(上万 input tokens)只为听一句 SKIP——和双倍计费同款的
+    「结果正常、过程贵」。成功发出一条后计数清零。"""
+    n = int(_PROACTIVE_BACKOFF.get("skips") or 0) + 1
+    _PROACTIVE_BACKOFF["skips"] = n
+    delay = min(1800.0 * (2 ** (n - 1)), 4 * 3600.0)
+    _backoff(delay, f"{note}(连续第{n}次,退避{int(delay // 60)}分钟)")
 
 
 def proactive_public() -> dict[str, Any]:
@@ -2011,16 +2022,21 @@ async def _proactive_step() -> None:
         return
     text = str(out.get("text") or "").strip().strip('"“”\'‘’')
     if re.match(r"^\s*SKIP\b", text, re.IGNORECASE):
-        _backoff(1800.0, "模型判断此刻没有想说的话")
-        print("[api_loop:proactive] model chose SKIP, backoff 30min")
+        _skip_backoff("模型判断此刻没有想说的话")
+        print(f"[api_loop:proactive] model chose SKIP (#{_PROACTIVE_BACKOFF['skips']}), escalating backoff")
         return
     if not text:
-        _backoff(1800.0, "模型返回空内容")
-        print("[api_loop:proactive] empty text, backoff 30min")
+        _skip_backoff("模型返回空内容")
+        print(f"[api_loop:proactive] empty text (#{_PROACTIVE_BACKOFF['skips']}), escalating backoff")
         return
     if len(text) > 400:
         cut = text[:400].rsplit("\n", 1)[0].strip()
         text = cut or text[:400]
+    # 生成期间(可能数分钟)用户恰好来了新消息:主动文案会接在用户话头后面,
+    # 像自言自语。发送前再读一次库,用户有动静就丢弃这条。
+    if str(proactive_db_stats()["last_user_ts"]) != str(stats["last_user_ts"]):
+        print("[api_loop:proactive] user messaged during generation; dropping draft")
+        return
     ok, body = await relay_out({
         "type": "reply",
         "text": text,
@@ -2034,6 +2050,7 @@ async def _proactive_step() -> None:
         return
     _PROACTIVE_BACKOFF["until"] = 0.0
     _PROACTIVE_BACKOFF["note"] = "ok"
+    _PROACTIVE_BACKOFF["skips"] = 0
     print(f"[api_loop:proactive] sent ({len(text)} chars, session={session_id}, model={out.get('model')})")
 
 
@@ -2374,7 +2391,7 @@ async def loop_cancel(request: Request):
 if __name__ == "__main__":
     # 启动版本戳:排障时第一眼就能确认 pod 跑的是哪版代码(部署有没有生效)。
     # 改影响计费/流式行为的功能时顺手更新这个串。
-    print("[api_loop:boot] build=2026-09-08-attempt-break-fix+mcp-result-dedupe+ob-session-rotate", flush=True)
+    print("[api_loop:boot] build=2026-09-08-attempt-break-fix+mcp-result-dedupe+ob-session-rotate+proactive-polish", flush=True)
     # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
     # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
     # 需要排障时再临时开,平时保持安静。
