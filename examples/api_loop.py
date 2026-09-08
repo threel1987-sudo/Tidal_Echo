@@ -1432,7 +1432,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                         _ROUTE_NO_TOOLS.add(route_key)
                         print(
                             f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only; "
-                            f"route marked no-tools for process lifetime (restart to reset); detail={err_detail[:300]!r}"
+                            f"route marked no-tools for process lifetime (restart to reset); detail={err_detail[:300]!r}",
+                            flush=True,
                         )
                         continue
                     raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
@@ -1486,7 +1487,7 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                         usage = {}
                         raw_msg = {}
                         saw_finish = False
-                        print(f"[api_loop:stream] mid-stream generation restart detected (#{restart_count}); dropping earlier partial output")
+                        print(f"[api_loop:stream] mid-stream generation restart detected (#{restart_count}); dropping earlier partial output", flush=True)
                         if on_restart:
                             try:
                                 await on_restart()
@@ -1820,7 +1821,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     last_error = ""
     all_tools = await mcp_tools()
     if all_tools:
-        print(f"[api_loop:tools] {len(all_tools)} tools → tool_loop: {[t['function']['name'] for t in all_tools][:30]}")
+        print(f"[api_loop:tools] {len(all_tools)} tools → tool_loop: {[t['function']['name'] for t in all_tools][:30]}", flush=True)
     if cancel_ev is not None and cancel_ev.is_set():
         raise _GenerationCancelled()
     for route in main_chain():
@@ -1878,9 +1879,9 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
         if not calls and isinstance(msg.get("function_call"), dict):
             calls = [{"id": "call_legacy", "type": "function", "function": msg["function_call"]}]
         if calls:
-            print(f"[api_loop:tool_loop] round={round_idx} received {len(calls)} tool_calls: {[c.get('function', {}).get('name') for c in calls]}")
+            print(f"[api_loop:tool_loop] round={round_idx} received {len(calls)} tool_calls: {[c.get('function', {}).get('name') for c in calls]}", flush=True)
         if not calls:
-            print(f"[api_loop:tool_loop] round={round_idx} final answer (no tool_calls)")
+            print(f"[api_loop:tool_loop] round={round_idx} final answer (no tool_calls)", flush=True)
             break
         msgs.append(msg)
         for call in calls:
