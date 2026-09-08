@@ -1783,9 +1783,14 @@ def mcp_result_text(data: dict[str, Any]) -> str:
     PWA 工具叠块的「结果」区用它展示(解掉 jsonrpc/result/content 包裹,
     直接呈现内容文本);喂给模型上下文的仍是完整 JSON,不受影响。
     """
+    # 部分网关(OB)把 result 包成单元素 list:[{content, structuredContent, isError}]
+    if isinstance(data, list) and len(data) == 1 and isinstance(data[0], (dict, str)):
+        data = data[0]
     if isinstance(data, dict) and data.get("error"):
         return json.dumps(data["error"], ensure_ascii=False, indent=2)
     res = data.get("result") if isinstance(data, dict) else data
+    if res is None and isinstance(data, dict):
+        res = data  # data 本身就是结果体(顶层直接带 content/structuredContent)
     if isinstance(res, dict):
         content = res.get("content")
         if isinstance(content, list):
@@ -1808,11 +1813,32 @@ def mcp_result_text(data: dict[str, Any]) -> str:
                     parts.append(json.dumps(item, ensure_ascii=False))
             if parts:
                 return "\n\n".join(parts)
-        if isinstance(res.get("structuredContent"), dict):
-            return json.dumps(res["structuredContent"], ensure_ascii=False, indent=2)
+        sc = res.get("structuredContent")
+        if isinstance(sc, dict):
+            if isinstance(sc.get("result"), str):
+                return sc["result"]
+            return json.dumps(sc, ensure_ascii=False, indent=2)
     if isinstance(res, str):
         return res
     return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def _dedupe_mcp_result(result: Any) -> Any:
+    """MCP 结果整形(喂模型前调用):
+    ① 解掉单元素 list 包裹(OB 的返回形状);
+    ② OB 的结果同时带 content[] 与 structuredContent.result 两份一模一样的文本
+       ——卡片「结果」区曾因此显示双份,喂回模型的 token 也翻倍。
+       structuredContent 若只是 content 文本的镜像则剥掉;若是更丰富的结构数据则保留。
+    """
+    if isinstance(result, list) and len(result) == 1 and isinstance(result[0], dict):
+        result = result[0]
+    if isinstance(result, dict) and isinstance(result.get("content"), list) and result["content"]:
+        sc = result.get("structuredContent")
+        if isinstance(sc, dict) and isinstance(sc.get("result"), str):
+            text = mcp_result_text(result).strip()
+            if text and text == sc["result"].strip():
+                result = {k: v for k, v in result.items() if k != "structuredContent"}
+    return result
 
 
 # ── 模型调用主入口:多模型 fallback ─────────────────────────────────────────
@@ -1902,7 +1928,7 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
                 print(f"[api_loop:tool_loop] duplicate call skipped (reusing first result): {tool_name}")
             else:
                 try:
-                    result = await execute_mcp_tool(tool_name, args)
+                    result = _dedupe_mcp_result(await execute_mcp_tool(tool_name, args))
                     content = json.dumps(result, ensure_ascii=False)
                     collected.append(_tool_call_entry(tool_name, args, mcp_result_text(result)))
                 except Exception as exc:
@@ -2325,7 +2351,7 @@ async def loop_cancel(request: Request):
 if __name__ == "__main__":
     # 启动版本戳:排障时第一眼就能确认 pod 跑的是哪版代码(部署有没有生效)。
     # 改影响计费/流式行为的功能时顺手更新这个串。
-    print("[api_loop:boot] build=2026-09-08-attempt-break-fix", flush=True)
+    print("[api_loop:boot] build=2026-09-08-attempt-break-fix+mcp-result-dedupe", flush=True)
     # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
     # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
     # 需要排障时再临时开,平时保持安静。
