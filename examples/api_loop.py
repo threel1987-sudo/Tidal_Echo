@@ -2284,4 +2284,7 @@ async def loop_cancel(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=LOOP_PORT)
+    # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
+    # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
+    # 需要排障时再临时开,平时保持安静。
+    uvicorn.run(app, host="127.0.0.1", port=LOOP_PORT, access_log=False)
