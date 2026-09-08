@@ -1441,8 +1441,12 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     # (无正文无思考),网关流内重发 role 时旧守卫完全看不见,同一次调用会在
                     # buf 里累积两份 → 工具被执行两次、PWA 折叠块出现重复。role 重发一律
                     # 视为新一代(正规网关一条流只发一次 role,重发即重试)。
+                    # 同理,finish 之后第二代若以 tool_calls 增量开场(不重发 role、不先吐
+                    # 正文/思考),旧守卫同样看不见,buf 里会叠出两份一模一样的调用(PWA
+                    # 工具卡叠块重复的实测症状)。此时 buf 非空必为上一代残留——正常的
+                    # 「思考→工具」两段式里,工具增量到达时 buf 还是空的,不会误伤。
                     if (n["role"] and (text_parts or thinking_parts or tool_calls_buf)) or \
-                       (saw_finish and (n["content"] or n["thinking"])):
+                       (saw_finish and (n["content"] or n["thinking"] or (n["tool_calls"] and tool_calls_buf))):
                         restart_count += 1
                         text_parts.clear()
                         thinking_parts.clear()
