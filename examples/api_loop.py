@@ -1315,6 +1315,10 @@ class _DeltaEmitter:
         self.buf = ""
 
 
+# 路由级「不认 tools」记忆:(url, model) → 曾以 400/404/422 拒绝过 tools。
+_ROUTE_NO_TOOLS: set[tuple[str, str]] = set()
+
+
 async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, on_restart=None, cancel_ev: asyncio.Event | None = None, session_id: str = "") -> dict[str, Any]:
     """一次 chat/completions 调用(流式消费,只攒正文/思考/工具调用)。
 
@@ -1373,6 +1377,11 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     # 兼容性:带 tools 时最多试两次 —— 第一次全量;若网关不认 OpenAI 格式工具
     # (Anthropic 中转的转换层常在此崩溃),第二次摘掉 tools 纯文本重试,聊天永远不断。
     attempts = [tools, None] if tools else [None]
+    # 粘性跳过:该路由一旦以 4xx 拒过 tools,进程生命周期内不再尝试——否则每条
+    # 消息都白付一次注定 400 的请求(双倍扣费的实测来源),工具反正也从未成功过。
+    route_key = (str(route.get("url") or ""), str(route.get("model") or ""))
+    if tools and route_key in _ROUTE_NO_TOOLS:
+        attempts = [None]
     debug_stream = os.environ.get("LOOP_DEBUG_STREAM", "") not in ("", "0", "false", "False")
     async with httpx.AsyncClient(timeout=client_timeout, trust_env=False) as client:
         for attempt_no, cur_tools in enumerate(attempts):
@@ -1420,7 +1429,11 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     except Exception:
                         err_detail = str(resp.status_code)
                     if cur_tools and resp.status_code in (400, 404, 422):
-                        print(f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only; detail={err_detail[:300]!r}")
+                        _ROUTE_NO_TOOLS.add(route_key)
+                        print(
+                            f"[api_loop:compat] gateway rejected tools (HTTP {resp.status_code}), retrying text-only; "
+                            f"route marked no-tools for process lifetime (restart to reset); detail={err_detail[:300]!r}"
+                        )
                         continue
                     raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
                 saw_finish = False
