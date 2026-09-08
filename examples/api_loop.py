@@ -431,6 +431,22 @@ def rooms() -> dict[str, str]:
     return {str(k).strip(): str(v).strip() for k, v in raw.items() if str(k).strip() and str(v).strip()}
 
 
+def _home_fridge_available() -> bool:
+    """冰箱门工具当前是否真的可用:home 服务启用、且 fridge 工具没被列入 disabled_tools。
+
+    不可用时 spatial_block 绝不能在提示词里提这些工具——否则模型会去调一个
+    不存在的工具(幻觉调用,或退化成正文里的 <tool_call> 文本)。
+    """
+    for server in mcp_servers():
+        if server["url"] != HOME_STATE_MCP_URL:
+            continue
+        if not server["enabled"]:
+            return False
+        disabled = set(server.get("disabled_tools") or [])
+        return "home_state_fridge" not in disabled and "home_state_fridge_add" not in disabled
+    return False
+
+
 def spatial_block() -> str:
     """按当前场景生成【家的布局】【空间】【叙事】等段,追加进 system 提示。
 
@@ -446,6 +462,8 @@ def spatial_block() -> str:
     all_rooms = rooms()
     room_desc = all_rooms.get(room, "")
     guard = "以上只是空间与环境信息,不改变你的人格和说话方式。"
+    # 冰箱门段落提到具体工具名,只有工具真的可用时才注入
+    fridge_ok = _home_fridge_available()
 
     # 【家的布局】是稳定段:只要「你在家」(不管用户是否同在家)就认得整个家的结构,
     # 不因切到某个房间、或换新窗口没历史就忘了别的房间;放在【空间】(动态段)之前,
@@ -467,7 +485,7 @@ def spatial_block() -> str:
             "用 home_state_fridge_add 工具贴一张(只在他真的回来时会用上时贴,别刷屏)。"
             "反过来,用户也可能临出门时给你贴了纸条:她贴新的纸条时你会在聊天里收到提醒,"
             "想确认冰箱门上现在有什么,随时用 home_state_fridge 查,有留给你的就放在心上、回应她。"
-        )
+        ) if fridge_ok else ""
         return "\n".join(p for p in (layout, spatial, narrative, fridge, guard) if p)
 
     if scenario == "ai_away":
@@ -485,8 +503,8 @@ def spatial_block() -> str:
         fridge = (
             "【冰箱门】家里没人,冰箱门在家等你们:有话想留给对方、等一起回到家再读,"
             "可以用 home_state_fridge_add 工具贴一张。"
-        )
-        return f"{spatial}\n{narrative}\n{fridge}\n{guard}"
+        ) if fridge_ok else ""
+        return "\n".join(p for p in (spatial, narrative, fridge, guard) if p)
 
     # together_at_home
     # 【家的布局】见上方稳定段;这里再单独标当前房间。
@@ -501,7 +519,7 @@ def spatial_block() -> str:
         "【冰箱门】都到家了。冰箱门上若还贴着之前谁留的纸条:用户贴新的纸条时你会在聊天里收到提醒,"
         "收到提醒后再用 home_state_fridge 看一眼、自然回应她,读完用 home_state_fridge_read 标成已读;"
         "没有提醒就别主动去翻,同样的纸条别当成每轮都有的新东西重复念。你留的纸条她打开冰箱门自己会看到。"
-    )
+    ) if fridge_ok else ""
     return "\n".join(p for p in (layout, spatial, narrative, fridge, guard) if p)
 
 def temperature() -> float:
@@ -736,7 +754,8 @@ def mcp_servers() -> list[dict[str, Any]]:
     cleaned = (
         [
             {"name": str(r.get("name") or "server"), "url": str(r.get("url") or "").rstrip("/"),
-             "token": str(r.get("token") or ""), "enabled": bool(r.get("enabled", True))}
+             "token": str(r.get("token") or ""), "enabled": bool(r.get("enabled", True)),
+             "disabled_tools": [str(t) for t in (r.get("disabled_tools") or []) if str(t).strip()]}
             for r in rows if isinstance(r, dict) and r.get("url")
         ]
         if isinstance(rows, list)
