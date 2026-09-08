@@ -1318,6 +1318,29 @@ class _DeltaEmitter:
 # 路由级「不认 tools」记忆:(url, model) → 曾以 400/404/422 拒绝过 tools。
 _ROUTE_NO_TOOLS: set[tuple[str, str]] = set()
 
+# OB session 空闲轮换:OB 的语义召回去重/轮次注入/is_session_start 全部按 session
+# 记状态,一个万年不变的 session id 会让「关键词自动召回」在长会话里彻底失灵
+# (已实测:同一关键词,换新会话立刻召回,旧会话毫无动静)。
+# 模拟 Kelivo「新窗口」:同一聊天窗口内连续发言保持同一 OB session(上下文温度不断),
+# 空闲超过 LOOP_OB_SESSION_IDLE_MINUTES(默认 180 分钟)后下一条消息换新 id,
+# 召回与苏醒机制重新武装。
+_OB_SESSION_IDLE_S = max(30, int(os.environ.get("LOOP_OB_SESSION_IDLE_MINUTES", "180") or 180)) * 60
+_OB_SESSION_SLOTS: dict[str, dict[str, Any]] = {}
+
+
+def ob_session_id(base: str) -> str:
+    """把 PWA 会话 id 映射成带空闲轮换的 OB session id(见上方注释)。"""
+    now = time.time()
+    slot = _OB_SESSION_SLOTS.get(base)
+    if slot is None or (now - float(slot.get("last", 0.0))) > _OB_SESSION_IDLE_S:
+        stamp = dt.datetime.now(dt.timezone.utc).strftime("%m%d-%H%M")
+        slot = {"ob_id": f"{base}-w{stamp}-{uuid.uuid4().hex[:4]}", "last": now}
+        _OB_SESSION_SLOTS[base] = slot
+        print(f"[api_loop:session] OB session rotated → {slot['ob_id']}", flush=True)
+    else:
+        slot["last"] = now
+    return str(slot["ob_id"])
+
 
 async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, on_thinking=None, sink=None, on_restart=None, cancel_ev: asyncio.Event | None = None, session_id: str = "") -> dict[str, Any]:
     """一次 chat/completions 调用(流式消费,只攒正文/思考/工具调用)。
@@ -1363,7 +1386,7 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     # 独立,和 Kelivo 等客户端对齐。route.headers 里显式配了同名头时以它为准。
     session_header = str(route.get("session_header") or "").strip()
     if session_header and session_id and session_header.lower() not in {str(k).lower() for k in req_headers}:
-        req_headers[session_header] = session_id
+        req_headers[session_header] = ob_session_id(session_id)
 
     text_parts: list[str] = []
     thinking_parts: list[str] = []
@@ -2351,7 +2374,7 @@ async def loop_cancel(request: Request):
 if __name__ == "__main__":
     # 启动版本戳:排障时第一眼就能确认 pod 跑的是哪版代码(部署有没有生效)。
     # 改影响计费/流式行为的功能时顺手更新这个串。
-    print("[api_loop:boot] build=2026-09-08-attempt-break-fix+mcp-result-dedupe", flush=True)
+    print("[api_loop:boot] build=2026-09-08-attempt-break-fix+mcp-result-dedupe+ob-session-rotate", flush=True)
     # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
     # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
     # 需要排障时再临时开,平时保持安静。
