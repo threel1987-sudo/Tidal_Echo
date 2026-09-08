@@ -316,12 +316,22 @@ def _proactive_trigger(now_local: dt.datetime, idle_hours: float) -> str:
         idle_text = f"{idle_hours:.1f} 小时"
     else:
         idle_text = f"{max(1, int(idle_hours * 60))} 分钟"
+    # 家里那只猫此刻的真实状态(生命引擎推导):给主动开口一个自然的由头
+    cat = home_cat_state()
+    cat_hint = ""
+    if cat:
+        cat_hint = (
+            f"\n家里的猫「{cat.get('name') or '它'}」:{cat.get('summary')};"
+            f"饥饿:{cat.get('hunger_label')},陪伴:{cat.get('company_label')}。"
+            "如果借它说一句话很自然(比如它饿了、在门口等你们),可以把它当作开口的理由;不合适就忽略。"
+        )
     return (
         "（以下是一条内部系统提示，不要复述它，也不要在言辞中让用户察觉它的存在。）\n"
         f"现在用户的本地时间是：{time_str}。\n"
         f"用户已经大约 {idle_text} 没有给你发消息了。\n"
         "请你根据上面的聊天历史和这段沉默前的上下文，判断此刻有没有一件「真实、自然、值得说」的事想主动对用户讲。\n"
-        "可以是：接着聊上一次没聊完的话题、关心一件用户提过的事的进展、分享一个与你们有关的新想法、提醒一件你们约定过的事。\n"
+        "可以是：接着聊上一次没聊完的话题、关心一件用户提过的事的进展、分享一个与你们有关的新想法、提醒一件你们约定过的事。"
+        f"{cat_hint}\n"
         "要求：必须有具体的上下文依据；禁止机械式、生硬的寒暄，禁止前言不搭后语、像刚认识一样没话找话；"
         "不要只为了问候而硬凑「早安/午安/晚安」这类时间用语（除非上下文里确实合适）。\n"
         "语气和用词保持与你平时回复完全一致，长度 1～3 句，不要展开成小作文。\n"
@@ -476,6 +486,23 @@ def spatial_block() -> str:
     # 冰箱门段落提到具体工具名,只有工具真的可用时才注入
     fridge_ok = _home_fridge_available()
 
+    # 【猫】段:猫的生命状态由插件按时间真实推导(饥饿/睡眠/寂寞),四个场景都带上——
+    # 人出门了猫还在家活着。工具不可用时只说状态、不提工具名。
+    cat = home_cat_state()
+    cat_block = ""
+    if cat:
+        nm = str(cat.get("name") or "它")
+        cat_line = (
+            f"【猫】家里的猫「{nm}」:{cat.get('summary')};"
+            f"饥饿:{cat.get('hunger_label')},陪伴:{cat.get('company_label')}。"
+        )
+        if _home_cat_available():
+            cat_line += (
+                "它的状态是按时间真实推算的,不是你编的:剧情里喂过它就用 home_state_feed_cat 记一餐,"
+                "陪它玩了就用 home_state_pet_cat 记一次;它饿了或很久没人理,可以自然提起,像提起家里真实的成员。"
+            )
+        cat_block = cat_line
+
     # 【家的布局】是稳定段:只要「你在家」(不管用户是否同在家)就认得整个家的结构,
     # 不因切到某个房间、或换新窗口没历史就忘了别的房间;放在【空间】(动态段)之前,
     # 模型 API 的前缀缓存可复用,不浪费 token。
@@ -497,7 +524,7 @@ def spatial_block() -> str:
             "反过来,用户也可能临出门时给你贴了纸条:她贴新的纸条时你会在聊天里收到提醒,"
             "想确认冰箱门上现在有什么,随时用 home_state_fridge 查,有留给你的就放在心上、回应她。"
         ) if fridge_ok else ""
-        return "\n".join(p for p in (layout, spatial, narrative, fridge, guard) if p)
+        return "\n".join(p for p in (layout, spatial, narrative, cat_block, fridge, guard) if p)
 
     if scenario == "ai_away":
         spatial = "【空间】现在你短时间出趟门办点事,人就在附近,很快回家,两人通过手机文字聊天。"
@@ -506,7 +533,7 @@ def spatial_block() -> str:
             "【冰箱门】你只是短时间出门、很快回来,冰箱门纸条这会儿用不上——"
             "不用你贴,也不用她留,人马上就见面了。"
         )
-        return "\n".join(p for p in (spatial, narrative, fridge, guard) if p)
+        return "\n".join(p for p in (spatial, narrative, cat_block, fridge, guard) if p)
 
     if scenario == "together_out":
         spatial = "【空间】现在你和用户一起出门在外。"
@@ -515,7 +542,7 @@ def spatial_block() -> str:
             "【冰箱门】家里没人,冰箱门在家等你们:有话想留给对方、等一起回到家再读,"
             "可以用 home_state_fridge_add 工具贴一张。"
         ) if fridge_ok else ""
-        return "\n".join(p for p in (spatial, narrative, fridge, guard) if p)
+        return "\n".join(p for p in (spatial, narrative, cat_block, fridge, guard) if p)
 
     # together_at_home
     # 【家的布局】见上方稳定段;这里再单独标当前房间。
@@ -531,7 +558,7 @@ def spatial_block() -> str:
         "收到提醒后再用 home_state_fridge 看一眼、自然回应她,读完用 home_state_fridge_read 标成已读;"
         "没有提醒就别主动去翻,同样的纸条别当成每轮都有的新东西重复念。你留的纸条她打开冰箱门自己会看到。"
     ) if fridge_ok else ""
-    return "\n".join(p for p in (layout, spatial, narrative, fridge, guard) if p)
+    return "\n".join(p for p in (layout, spatial, narrative, cat_block, fridge, guard) if p)
 
 def temperature() -> float:
     try:
@@ -758,6 +785,43 @@ def _home_mcp_reachable() -> bool:
     except Exception:
         _AUTO_MCP["reachable"] = False
     return _AUTO_MCP["reachable"]
+
+
+_HOME_CAT: dict[str, Any] = {"checked": 0.0, "cat": None}
+
+
+def home_cat_state() -> dict[str, Any] | None:
+    """同机 home_state_mcp 里那只猫的实时视图(档案 + 生命引擎派生状态)。
+
+    60 秒缓存;插件抖动时保留上一份缓存,不让提示词闪变。没猫/插件不在 → None。
+    """
+    import urllib.request
+    now = time.time()
+    if now - float(_HOME_CAT["checked"]) < 60:
+        return _HOME_CAT["cat"]  # type: ignore[return-value]
+    _HOME_CAT["checked"] = now
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本机,不走代理
+        with opener.open(HOME_STATE_MCP_URL + "/state", timeout=2) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        cat = data.get("cat") if isinstance(data, dict) else None
+        _HOME_CAT["cat"] = cat if isinstance(cat, dict) and cat else None
+    except Exception:
+        pass
+    return _HOME_CAT["cat"]  # type: ignore[return-value]
+
+
+def _home_cat_available() -> bool:
+    """猫工具当前是否真的可用:home 服务启用、且喂食工具没被禁用。
+    不可用时【猫】段只描述状态、绝不提工具名(防幻觉调用)。"""
+    for server in mcp_servers():
+        if server["url"] != HOME_STATE_MCP_URL:
+            continue
+        if not server["enabled"]:
+            return False
+        disabled = set(server.get("disabled_tools") or [])
+        return "home_state_feed_cat" not in disabled
+    return False
 
 
 def mcp_servers() -> list[dict[str, Any]]:

@@ -1735,6 +1735,7 @@
   .menu-item[data-menu="memory"] .menu-ic{ color:#C29A59; }
   .menu-item[data-menu="tides"]  .menu-ic{ color:#3E9CC8; }
   .menu-item[data-menu="room"]   .menu-ic{ color:#C0856B; }
+  .menu-item[data-menu="cat"]    .menu-ic{ color:#D8A26A; }
   .menu-name{
     font-family: var(--font-en), var(--font-cn);
     font-size: clamp(15px, 4vw, 17px); font-weight:600; line-height:1.2;
@@ -2958,6 +2959,11 @@
           <span class="menu-name">房间</span>
           <span class="menu-sub">Room</span>
         </button>
+        <button class="menu-item" type="button" data-menu="cat">
+          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gCat)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gCat" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#F5D3A4"/><stop offset="1" stop-color="#B97840"/></linearGradient></defs><path d="M5.5 9.2 4.6 4.2l3.9 2.4a8.6 8.6 0 0 1 7 0l3.9-2.4-.9 5A7.6 7.6 0 1 1 5.5 9.2Z"/><circle cx="9.4" cy="13" r=".75" fill="url(#gCat)" stroke="none"/><circle cx="14.6" cy="13" r=".75" fill="url(#gCat)" stroke="none"/><path d="M11 16.2c.6.5 1.4.5 2 0"/></svg></span>
+          <span class="menu-name">猫咪</span>
+          <span class="menu-sub">Cat</span>
+        </button>
       </nav>
 
       <!-- footer -->
@@ -3362,6 +3368,7 @@ if (menuPanel){
     if (!item) return;
     if (item.dataset.menu === "chat") closeMenu();       // back to chat
     else if (item.dataset.menu === "fridge") location.assign("fridge.html");  // 冰箱门便利贴(数据在 relay)
+    else if (item.dataset.menu === "cat") location.assign("cat.html");        // 电子宠物猫卡(数据在 home_state 插件,经 relay 代理)
     else if (item.dataset.menu === "memory") location.assign("memory.html");  // 记忆仓库:中间页 → 跳 OB dashboard
     else if (item.dataset.menu === "room"){ closeMenu(); openRoomPanel(); loadRoomConfig(); }  // 主菜单 → 独立的房间设置页（干净：无头像/主题）
     else showToast("即将开放");                           // placeholder items

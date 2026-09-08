@@ -89,6 +89,8 @@ BRAIN_FILE = Path(os.environ.get("RELAY_BRAIN_FILE", str(Path(__file__).parent /
 DEFAULT_BRAIN = os.environ.get("RELAY_DEFAULT_BRAIN", "desktop").strip().lower()
 LOOP_INGEST_URL = os.environ.get("RELAY_LOOP_INGEST_URL", "http://127.0.0.1:3020/loop/ingest")
 STREAM_DRAFT_TTL = int(os.environ.get("RELAY_STREAM_DRAFT_TTL", "600"))
+# co-located home_state MCP plugin (cat life engine lives there; relay just proxies)
+HOME_STATE_MCP_URL = os.environ.get("HOME_STATE_MCP_URL", "http://127.0.0.1:3025").rstrip("/")
 
 if not SECRET:
     raise SystemExit("RELAY_SECRET is required (set it in the systemd EnvironmentFile)")
@@ -1145,6 +1147,54 @@ async def fridge_tear(note_id: int, request: Request):
             raise HTTPException(status_code=404, detail="note not found")
     await broadcast(app_subs, fridge_event("tear"))
     return {"removed": note_id, "ok": True}
+
+
+# ---- cat (electronic pet — state lives in the home_state plugin) -----------
+
+def _home_http(path: str, method: str = "GET", body: dict | None = None) -> dict:
+    """Sync call into the co-located home_state plugin (plain HTTP, localhost-only)."""
+    data = None
+    headers = {"Content-Type": "application/json"}
+    if body is not None:
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(HOME_STATE_MCP_URL + path, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        raw = resp.read().decode("utf-8")
+        return json.loads(raw) if raw else {}
+
+
+async def _home_http_async(path: str, method: str = "GET", body: dict | None = None) -> dict:
+    try:
+        return await asyncio.to_thread(_home_http, path, method, body)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8", "replace")).get("detail", "")
+        except Exception:
+            detail = ""
+        raise HTTPException(status_code=exc.code, detail=detail or f"home plugin error {exc.code}")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"home plugin unreachable: {type(exc).__name__}")
+
+
+@app.get("/app/cat")
+async def cat_get(request: Request):
+    """Cat profile + live derived state (hunger/mood/sleep…), for the PWA cat page."""
+    check_auth(request)
+    return await _home_http_async("/state")
+
+
+@app.post("/app/cat/action")
+async def cat_action(request: Request):
+    """adopt / feed / pet — proxied to the plugin; broadcasts a 'cat' event."""
+    check_auth(request)
+    body = await request.json()
+    data = await _home_http_async("/action", method="POST", body=body if isinstance(body, dict) else {})
+    await broadcast(app_subs, {
+        "type": "cat",
+        "cat": data.get("cat"),
+        "cat_enabled": data.get("cat_enabled"),
+    })
+    return data
 
 
 @app.get("/app/stream")

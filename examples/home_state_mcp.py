@@ -42,6 +42,7 @@ mcp_home_home_state_get、mcp_home_home_state_adopt_cat ……(前缀由服务�
 """
 
 import argparse
+import datetime as dt
 import json
 import os
 import threading
@@ -49,6 +50,7 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 DEFAULT_PORT = int(os.environ.get("HOME_STATE_PORT", "3025"))
 STATE_FILE = Path(os.environ.get("HOME_STATE_FILE", str(Path(__file__).resolve().parent / "home_state.json")))
@@ -98,6 +100,28 @@ TOOLS = [
                 "status": {"type": "string", "description": "在做什么,如「趴在地毯上打盹」"},
                 "mood": {"type": "string", "description": "心情,如「懒洋洋」"},
                 "name": {"type": "string", "description": "改名用,选填"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "home_state_feed_cat",
+        "description": "喂猫。用户说它喂了猫、或你们剧情里有人给猫添了粮时调用,猫会记下这顿饭的时间(它的饥饿状态是按时间自动推算的)。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "food": {"type": "string", "description": "喂了什么,如「猫粮」「罐头」,选填"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "home_state_pet_cat",
+        "description": "摸一摸猫。用户或你在剧情里摸了它、陪它玩了一会儿时调用,猫会记下这次亲近(它的心情和黏人程度是按互动时间推算的)。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "how": {"type": "string", "description": "怎么摸的/怎么陪的,如「挠下巴」「逗猫棒」,选填"},
             },
             "additionalProperties": False,
         },
@@ -201,6 +225,206 @@ def _clip(items: list) -> list:
     return items[-100:]
 
 
+# ── 猫咪生命引擎(纯规则,零 LLM:让猫在没人说话时也在「活着」)─────────────
+# 猫的「底层生命」不落库,每次读取时按「本地当前时间 + 上次互动时间戳」现场推导:
+# 深夜会睡、饭点会饿、太久没人理会寂寞、刚被喂/被摸会满足。
+# 模型用 set_cat 写的叙事状态若很新(<2h)优先展示,饥饿/寂寞作为底层状态叠加
+# (比如叙事说「在窗台晒太阳」,但已 20 小时没喂,会同时带上「饿」)。
+CAT_TZ = os.environ.get("HOME_STATE_TZ", "Asia/Shanghai")
+_CAT_NARRATIVE_FRESH_S = 2 * 3600
+_CAT_WANDER = [
+    ("客厅地毯上", "摊成一滩晒太阳"),
+    ("窗台上", "看楼下的鸟发呆"),
+    ("猫爬架顶层", "居高临下巡视它的领地"),
+    ("沙发角落里", "认真地踩奶"),
+    ("走廊上", "追着自己的尾巴跑"),
+    ("你的椅子扶手上", "揣着手手打盹"),
+]
+
+
+def _cat_now() -> dt.datetime:
+    try:
+        return dt.datetime.now(ZoneInfo(CAT_TZ))
+    except Exception:
+        return dt.datetime.now(ZoneInfo("Asia/Shanghai"))
+
+
+def _cat_ts_epoch(ts: object) -> float:
+    if not ts:
+        return 0.0
+    try:
+        d = dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=dt.timezone.utc)
+        return d.timestamp()
+    except Exception:
+        return 0.0
+
+
+def _cat_iso_now() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _hours_since(ts: object) -> float | None:
+    epoch = _cat_ts_epoch(ts)
+    if epoch <= 0:
+        return None
+    return max(0.0, (dt.datetime.now(dt.timezone.utc).timestamp() - epoch) / 3600.0)
+
+
+def derive_cat(cat: dict) -> dict:
+    """从 cat 记录推导实时状态。返回可直接给 PWA / 注入 prompt 的视图。"""
+    now = _cat_now()
+    hour = now.hour + now.minute / 60.0
+    fed_h = _hours_since(cat.get("last_fed_at"))
+    pet_h = _hours_since(cat.get("last_petted_at"))
+    set_h = _hours_since(cat.get("last_set_at"))
+    interact_ts = max(
+        _cat_ts_epoch(cat.get("last_fed_at")),
+        _cat_ts_epoch(cat.get("last_petted_at")),
+        _cat_ts_epoch(cat.get("last_set_at")),
+        _cat_ts_epoch(cat.get("adopted_at")),
+    )
+    alone_h = None
+    if interact_ts > 0:
+        alone_h = max(0.0, (dt.datetime.now(dt.timezone.utc).timestamp() - interact_ts) / 3600.0)
+
+    # 饥饿 0-3:饱 / 有点饿 / 饿 / 很饿
+    if fed_h is None:
+        hunger = 1
+    elif fed_h < 6:
+        hunger = 0
+    elif fed_h < 12:
+        hunger = 1
+    elif fed_h < 20:
+        hunger = 2
+    else:
+        hunger = 3
+    # 寂寞 0-3
+    if alone_h is None or alone_h < 4:
+        lonely = 0
+    elif alone_h < 12:
+        lonely = 1
+    elif alone_h < 24:
+        lonely = 2
+    else:
+        lonely = 3
+
+    sleeping = hour >= 23.0 or hour < 6.5
+    mealtime = (7.0 <= hour < 8.5) or (12.0 <= hour < 13.0) or (18.0 <= hour < 19.5)
+
+    auto_location, auto_status, auto_mood = "", "", "悠闲"
+    if sleeping:
+        auto_location, auto_status, auto_mood = "它的猫窝里", "蜷成一团睡觉", "安稳"
+    elif hunger >= 2 and mealtime:
+        auto_location, auto_status, auto_mood = "饭碗旁边", "蹲着等开饭", "委屈巴巴"
+    elif hunger >= 3:
+        auto_location, auto_status, auto_mood = "饭碗旁边", "围着空碗转圈", "饿得直叫"
+    elif lonely >= 3:
+        auto_location, auto_status, auto_mood = "门口的垫子上", "趴着等你们回来", "没精打采"
+    elif pet_h is not None and pet_h < 1:
+        auto_location, auto_status, auto_mood = "你身边", "眯着眼睛打呼噜", "开心"
+    elif fed_h is not None and fed_h < 1:
+        auto_location, auto_status, auto_mood = "饭碗旁边", "满足地舔爪子", "心满意足"
+    else:
+        slot = int((now.day * 24 + now.hour) // 3) % len(_CAT_WANDER)
+        auto_location, auto_status = _CAT_WANDER[slot]
+
+    narrative_fresh = bool(cat.get("status")) and set_h is not None and set_h * 3600 < _CAT_NARRATIVE_FRESH_S
+    if narrative_fresh:
+        location = str(cat.get("location") or auto_location)
+        status = str(cat.get("status") or auto_status)
+        mood = str(cat.get("mood") or auto_mood)
+        source = "narrative"
+    else:
+        location, status, mood, source = auto_location, auto_status, auto_mood, "auto"
+    # 底层状态叠加:不管叙事怎么说,饿了就是饿了,久没人理就是会蔫。
+    overlay = []
+    if hunger >= 2 and not (sleeping and hunger < 3):
+        overlay.append("饿" if hunger == 2 else "很饿")
+    if lonely >= 2 and not sleeping:
+        overlay.append("有点想你们" if lonely == 2 else "很久没人陪了")
+
+    hunger_label = ("饱饱的", "有点饿", "饿了", "很饿")[hunger]
+    company_label = ("满足", "还好", "有点寂寞", "很寂寞")[lonely]
+    summary = f"现在在{location},{status}"
+    if overlay:
+        summary += f"({'、'.join(overlay)})"
+    summary += f";心情:{mood}"
+    return {
+        "location": location,
+        "status": status,
+        "mood": mood,
+        "source": source,
+        "hunger": hunger,
+        "hunger_label": hunger_label,
+        "lonely": lonely,
+        "company_label": company_label,
+        "sleeping": sleeping,
+        "summary": summary,
+        "fed_hours_ago": round(fed_h, 1) if fed_h is not None else None,
+        "petted_hours_ago": round(pet_h, 1) if pet_h is not None else None,
+    }
+
+
+def cat_view(state: dict) -> dict | None:
+    """给 HTTP /state 用的完整猫视图(档案 + 派生状态);没猫返回 None。"""
+    cat = state.get("cat")
+    if not state.get("cat_enabled") or not isinstance(cat, dict) or not cat:
+        return None
+    view = {k: cat.get(k) for k in ("name", "color", "age", "personality", "adopted_at", "last_fed_at", "last_petted_at")}
+    view.update(derive_cat(cat))
+    return view
+
+
+def cat_action(action: str, fields: dict) -> tuple[dict, str | None]:
+    """PWA 经 relay 代理过来的猫咪动作(adopt/feed/pet)。
+
+    和 MCP 工具共用同一份状态文件;返回 (payload, err),err 为 None 即成功。
+    """
+    state = load_state()
+
+    if action == "adopt":
+        if isinstance(state.get("cat"), dict) and state.get("cat"):
+            return {"cat": cat_view(state)}, "家里已经有一只猫了。"
+        nm = str(fields.get("name") or "").strip()
+        if not nm:
+            return {}, "接猫回家要给它一个名字。"
+        # 用户在 PWA 亲手登记 = 小猫正式进门,顺手把猫功能打开
+        # (MCP 侧的 adopt 工具仍要求先开启,那是给「剧情里接猫」留的门)。
+        state["cat_enabled"] = True
+        state["cat"] = {
+            "name": nm[:40],
+            "color": str(fields.get("color") or "").strip()[:40],
+            "age": str(fields.get("age") or "").strip()[:60],
+            "personality": str(fields.get("personality") or "").strip()[:120],
+            "location": "", "status": "", "mood": "",
+            "adopted_at": _cat_iso_now(),
+            "last_set_at": _cat_iso_now(),
+        }
+        save_state(state)
+        return {"cat": cat_view(state), "note": "adopted"}, None
+
+    if not state.get("cat_enabled"):
+        return {}, "猫功能还没开启(你们还没一起把小猫接回家)。"
+
+    cat = state.get("cat")
+    if not isinstance(cat, dict) or not cat:
+        return {}, "家里还没有猫,先把它接回家登记。"
+
+    if action == "feed":
+        cat["last_fed_at"] = _cat_iso_now()
+        state["cat"] = cat
+        save_state(state)
+        return {"cat": cat_view(state), "note": "fed"}, None
+    if action == "pet":
+        cat["last_petted_at"] = _cat_iso_now()
+        state["cat"] = cat
+        save_state(state)
+        return {"cat": cat_view(state), "note": "petted"}, None
+    return {}, f"不认识的动作:{action}"
+
+
 def _fmt_state(state: dict) -> str:
     lines: list[str] = []
     cat = state.get("cat")
@@ -212,12 +436,10 @@ def _fmt_state(state: dict) -> str:
             bits.append(str(cat["age"]))
         if cat.get("personality"):
             bits.append(f"性格:{cat['personality']}")
-        if cat.get("location"):
-            bits.append(f"现在在{cat['location']}")
-        if cat.get("status"):
-            bits.append(f"正在{cat['status']}")
-        if cat.get("mood"):
-            bits.append(f"心情:{cat['mood']}")
+        view = derive_cat(cat)
+        bits.append(view["summary"].replace(";", ","))
+        bits.append(f"饥饿:{view['hunger_label']}(上次喂食 {view['fed_hours_ago']} 小时前)" if view["fed_hours_ago"] is not None else f"饥饿:{view['hunger_label']}(还没喂过)")
+        bits.append(f"陪伴:{view['company_label']}")
         lines.append("、".join(bits) + "。")
     else:
         lines.append("家里还没有猫咪 —— 猫功能还没开启,你们还没一起把那只小猫接回家。")
@@ -319,6 +541,8 @@ def call_tool(name: str, arguments: dict) -> tuple[str, bool]:
             "location": "",
             "status": "",
             "mood": "",
+            "adopted_at": _cat_iso_now(),
+            "last_set_at": _cat_iso_now(),
         }
         save_state(state)
         return f"好的,「{nm}」正式成为家里的一员了。它刚进门,先把它的毛色、年龄、性格记下来,再看它躲进哪个房间。", False
@@ -333,9 +557,37 @@ def call_tool(name: str, arguments: dict) -> tuple[str, bool]:
             val = args.get(key)
             if isinstance(val, str) and val.strip():
                 cat[key] = val.strip()
+        cat["last_set_at"] = _cat_iso_now()
         state["cat"] = cat
         save_state(state)
         return "记下了。\n" + _fmt_state(state), False
+
+    if name == "home_state_feed_cat":
+        if not state.get("cat_enabled"):
+            return "家里还没有猫咪,没有小猫要喂。", False
+        cat = state.get("cat")
+        if not isinstance(cat, dict) or not cat:
+            return "家里还没有猫的记录。等猫咪接回家登记之后,才能喂它。", False
+        cat["last_fed_at"] = _cat_iso_now()
+        state["cat"] = cat
+        save_state(state)
+        food = str(args.get("food") or "").strip()
+        nm = cat.get("name") or "它"
+        return f"记下了,{nm}这顿{('吃的是' + food) if food else '已经吃过'}。它这会儿心满意足。\n" + _fmt_state(state), False
+
+    if name == "home_state_pet_cat":
+        if not state.get("cat_enabled"):
+            return "家里还没有猫咪,没有小猫要摸。", False
+        cat = state.get("cat")
+        if not isinstance(cat, dict) or not cat:
+            return "家里还没有猫的记录。等猫咪接回家登记之后,才能摸它。", False
+        cat["last_petted_at"] = _cat_iso_now()
+        state["cat"] = cat
+        save_state(state)
+        how = str(args.get("how") or "").strip()
+        nm = cat.get("name") or "它"
+        tail = f"({how})" if how else ""
+        return f"记下了,{nm}刚被好好疼爱过{tail},开心得直打呼噜。\n" + _fmt_state(state), False
 
     if name == "home_state_add_note":
         text = str(args.get("text") or "").strip()
@@ -408,8 +660,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):  # 简易健康检查:只暴露开关和数量,不吐正文
+    def do_GET(self):
+        path = (self.path or "/").split("?", 1)[0].rstrip("/") or "/"
         state = load_state()
+        if path == "/state":
+            # PWA(经 relay 代理)/ api_loop 注入用:猫档案 + 实时推导状态
+            self._send(200, {
+                "ok": True,
+                "cat_enabled": bool(state.get("cat_enabled")),
+                "cat": cat_view(state),
+                "notes_count": len([n for n in state.get("notes") or [] if isinstance(n, dict)]),
+                "wall_count": len([w for w in state.get("wall") or [] if isinstance(w, dict)]),
+            })
+            return
+        # 简易健康检查:只暴露开关和数量,不吐正文
         cat = state.get("cat") if isinstance(state.get("cat"), dict) else {}
         self._send(200, {
             "ok": True,
@@ -421,8 +685,25 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def do_POST(self):
+        path = (self.path or "/").split("?", 1)[0].rstrip("/") or "/"
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length > 0 else b"{}"
+        if path == "/action":
+            # PWA 猫咪动作(经 relay 代理,鉴权在 relay 那层做过了)
+            try:
+                body = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            action = str(body.pop("action", "") or "").strip()
+            payload, err = cat_action(action, body)
+            if err:
+                self._send(400, {"ok": False, "detail": err, **({"cat": payload.get("cat")} if payload.get("cat") else {})})
+                return
+            state = load_state()
+            self._send(200, {"ok": True, "cat_enabled": bool(state.get("cat_enabled")), **payload})
+            return
         try:
             req = json.loads(raw.decode("utf-8") or "{}")
         except Exception:
