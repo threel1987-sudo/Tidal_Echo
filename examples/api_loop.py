@@ -1364,6 +1364,14 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
             else:
                 req_body.pop("tools", None)
                 req_body.pop("tool_choice", None)
+            # 请求级日志:数清每条用户消息到底产生了几次上游调用(双倍扣费排查)。
+            # 一条消息正常应只有一行 →POST 和一行 ✓done;出现两行 →POST 说明是
+            # 我们这边的工具续轮/兼容重试,没有则说明双倍发生在网关内部。
+            print(
+                f"[api_loop:chat] → POST model={route.get('model')} attempt={attempt_no} "
+                f"tools={len(cur_tools or [])} max_tokens={req_body.get('max_tokens', 'auto')} session={session_id or '-'}",
+                flush=True,
+            )
             if debug_stream:
                 _tnames = [str((t.get("function") or {}).get("name") or "") for t in (cur_tools or [])]
                 print(f"[api_loop:debug] POST attempt={attempt_no} tool_count={len(_tnames)} tool_names={_tnames[:30]}")
@@ -1480,6 +1488,12 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     raw_msg["content"] = final_text
     if raw_tool_calls:
         raw_msg["tool_calls"] = raw_tool_calls
+    print(
+        f"[api_loop:chat] ✓ done model={route.get('model')} text_len={len(final_text)} "
+        f"thinking_len={len(''.join(thinking_parts))} tool_calls={len(tool_calls_parsed)} "
+        f"restarts={restart_count} saw_finish={saw_finish} usage={usage}",
+        flush=True,
+    )
     return {
         "text": final_text,
         "message": raw_msg,
@@ -1816,6 +1830,7 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
         if calls:
             print(f"[api_loop:tool_loop] round={round_idx} received {len(calls)} tool_calls: {[c.get('function', {}).get('name') for c in calls]}")
         if not calls:
+            print(f"[api_loop:tool_loop] round={round_idx} final answer (no tool_calls)")
             break
         msgs.append(msg)
         for call in calls:
