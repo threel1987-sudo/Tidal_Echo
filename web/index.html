@@ -4582,6 +4582,10 @@ function renderMcpList(){
       const wasOpen = item.classList.contains("open");
       item.classList.toggle("open", !wasOpen);
       if (!wasOpen && server.url) {
+        if (server.enabled === false) {
+          // 停用中的服务后端不会去问它要工具列表,别用「暂无可用工具」误导
+          toolsLoading.textContent = "该服务已停用——点右上角启用后,再展开就能看到工具列表。";
+        } else {
         const cacheKey = server.url;
         if (MCP_TOOLS_CACHE[cacheKey]) {
           renderToolsList(toolsPanel, MCP_TOOLS_CACHE[cacheKey], server, position);
@@ -4591,12 +4595,19 @@ function renderMcpList(){
             const r = await fetch(`${API_BASE}/app/debug-mcp`, { headers: authHeaders() });
             const body = await r.json();
             const serverResult = body.servers && body.servers.find(s => s.url === server.url);
-            const tools = serverResult ? (serverResult.tools || []) : [];
-            MCP_TOOLS_CACHE[cacheKey] = tools;
-            renderToolsList(toolsPanel, tools, server, position);
+            if (!serverResult) {
+              toolsLoading.textContent = "loop 侧查不到这个服务(可能刚被移除),刷新一下试试。";
+            } else if (serverResult.ok === false) {
+              toolsLoading.textContent = "工具列表加载失败:" + (serverResult.error || "未知错误");
+            } else {
+              const tools = serverResult.tools || [];
+              MCP_TOOLS_CACHE[cacheKey] = tools;
+              renderToolsList(toolsPanel, tools, server, position);
+            }
           } catch (_) {
             toolsLoading.textContent = "无法加载工具列表";
           }
+        }
         }
       }
     });
