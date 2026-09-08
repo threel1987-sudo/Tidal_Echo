@@ -2317,6 +2317,9 @@ async def loop_cancel(request: Request):
 
 
 if __name__ == "__main__":
+    # 启动版本戳:排障时第一眼就能确认 pod 跑的是哪版代码(部署有没有生效)。
+    # 改影响计费/流式行为的功能时顺手更新这个串。
+    print("[api_loop:boot] build=2026-09-08-sticky-tools+flush", flush=True)
     # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
     # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
     # 需要排障时再临时开,平时保持安静。
