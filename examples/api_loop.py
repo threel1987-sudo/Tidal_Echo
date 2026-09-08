@@ -1519,6 +1519,12 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                         if debug_stream:
                             print(f"[api_loop:debug] TOOL_DELTA |{n['tool_calls']}")
                         accumulate_tool_calls(tool_calls_buf, n["tool_calls"])
+            # 成功跑完一条流必须退出尝试循环——第二次尝试只允许由上面的 4xx 兼容
+            # 分支 continue 触发。这里曾漏了 break:只要配了 tools,每条消息都会把
+            # 「带工具」「纯文本」各完整生成一遍 → 稳定双倍扣费;且 attempt=1 的
+            # role 帧撞上 attempt=0 残留的缓冲区,误触流内重生检测(restarts=1),
+            # 把第一版思考/正文清掉,呈现「两版留第二版」。
+            break
 
     merged_thinking = merge_thinking(thinking_parts)
     tool_calls_parsed, raw_tool_calls = finalize_tool_calls(tool_calls_buf)
@@ -2319,7 +2325,7 @@ async def loop_cancel(request: Request):
 if __name__ == "__main__":
     # 启动版本戳:排障时第一眼就能确认 pod 跑的是哪版代码(部署有没有生效)。
     # 改影响计费/流式行为的功能时顺手更新这个串。
-    print("[api_loop:boot] build=2026-09-08-sticky-tools+flush", flush=True)
+    print("[api_loop:boot] build=2026-09-08-attempt-break-fix", flush=True)
     # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
     # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
     # 需要排障时再临时开,平时保持安静。
