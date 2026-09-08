@@ -1367,9 +1367,19 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
             # 请求级日志:数清每条用户消息到底产生了几次上游调用(双倍扣费排查)。
             # 一条消息正常应只有一行 →POST 和一行 ✓done;出现两行 →POST 说明是
             # 我们这边的工具续轮/兼容重试,没有则说明双倍发生在网关内部。
+            # 同时把实际发出的报文字段与请求头打出来(消息体/密钥脱敏):
+            # 若报文里混入 thinking 类参数或可疑头,网关可能因此走「思考+正文」两段式双倍计费。
+            _log_body = {
+                k: (f"<{len(v)} messages>" if k == "messages" else (f"<{len(v)} tools>" if k == "tools" else v))
+                for k, v in req_body.items()
+            }
+            _log_headers = {
+                k: ("***" if str(k).lower() in ("authorization", "x-api-key") else v)
+                for k, v in req_headers.items()
+            }
             print(
-                f"[api_loop:chat] → POST model={route.get('model')} attempt={attempt_no} "
-                f"tools={len(cur_tools or [])} max_tokens={req_body.get('max_tokens', 'auto')} session={session_id or '-'}",
+                f"[api_loop:chat] → POST model={route.get('model')} attempt={attempt_no} session={session_id or '-'} "
+                f"body={json.dumps(_log_body, ensure_ascii=False)} headers={json.dumps(_log_headers, ensure_ascii=False)}",
                 flush=True,
             )
             if debug_stream:
@@ -1396,6 +1406,8 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                     raise HTTPException(status_code=max(resp.status_code, 400), detail=err_detail)
                 saw_finish = False
                 restart_count = 0
+                finish_count = 0   # 本条流里 finish_reason 出现次数(>1 = 网关一条流里跑了多代)
+                usage_count = 0    # usage 帧出现次数(>1 = 多代各自计费的可能性大)
                 async for line in resp.aiter_lines():
                     if cancel_ev is not None and cancel_ev.is_set():
                         raise _GenerationCancelled()
@@ -1446,8 +1458,10 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
                                 pass
                     if n["finish_reason"]:
                         saw_finish = True
+                        finish_count += 1
                     if n["usage"]:
                         usage = n["usage"]
+                        usage_count += 1
                     if n["role"]:
                         raw_msg["role"] = n["role"]
                     if n["content"]:
@@ -1491,7 +1505,7 @@ async def chat_once(route: dict[str, Any], messages: list[dict[str, Any]], tools
     print(
         f"[api_loop:chat] ✓ done model={route.get('model')} text_len={len(final_text)} "
         f"thinking_len={len(''.join(thinking_parts))} tool_calls={len(tool_calls_parsed)} "
-        f"restarts={restart_count} saw_finish={saw_finish} usage={usage}",
+        f"restarts={restart_count} finishes={finish_count} usage_frames={usage_count} usage={usage}",
         flush=True,
     )
     return {
