@@ -91,7 +91,13 @@ RELAY_SECRET = os.environ.get("RELAY_SECRET", "")
 PERSONA_FILE = os.environ.get("PERSONA_FILE", "")
 PERSONA = os.environ.get("PERSONA", "").strip()
 HISTORY_N = int(os.environ.get("HISTORY_N", "24"))
-MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2000"))
+# max_tokens 默认「自动」(None = 请求里干脆不带这个字段,跟随模型默认上限)。
+# 千万不要给个保守默认值(比如 2000):带思考链的模型「思考+正文」轻松超限,
+# 被截断后中转网关常会在同一条 SSE 流里自动发起第二次生成来续写——
+# 上游因此扣两次费、思考链出现两版、工具调用被重发叠加(折叠块里出现重复)。
+# 只有用户显式配置时才发送该参数。
+_raw_max_tokens = os.environ.get("LLM_MAX_TOKENS", "").strip()
+MAX_TOKENS: int | None = int(_raw_max_tokens) if _raw_max_tokens else None
 TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.7"))
 
 STREAM_OUTPUT = os.environ.get("LOOP_STREAM", "1").lower() not in {"0", "false", "no"}
@@ -1075,24 +1081,78 @@ def accumulate_tool_calls(buf: list[dict[str, Any]], incoming: list[dict[str, An
             })
 
 
+def _parse_tool_args(raw: str) -> dict[str, Any]:
+    """把流式累积的 arguments 字符串解析成 dict,容错两种网关重发损伤:
+    - 拼接 JSON('{"a":1}{"a":1}':同一次调用被流内重发叠加)→ 取最后一个完整对象
+      (最新一代的参数;第一代已被截断作废);
+    - 尾部垃圾/截断 → 退回第一个完整对象,再不行 {}。
+    普通 JSON 一次解析命中,行为与 json.loads 完全一致。"""
+    s = str(raw or "").strip()
+    if not s:
+        return {}
+    try:
+        obj = json.loads(s)
+        return obj if isinstance(obj, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        pass
+    decoder = json.JSONDecoder()
+    found: list[Any] = []
+    idx = 0
+    while idx < len(s):
+        while idx < len(s) and s[idx] not in "{[":
+            idx += 1
+        if idx >= len(s):
+            break
+        try:
+            obj, end = decoder.raw_decode(s, idx)
+            found.append(obj)
+            idx = end
+        except json.JSONDecodeError:
+            break
+    for obj in reversed(found):
+        if isinstance(obj, dict):
+            return obj
+    return {}
+
+
+def _canon_args(args: dict[str, Any]) -> str:
+    try:
+        return json.dumps(args, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        return str(args)
+
+
 def finalize_tool_calls(buf: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """把缓冲转成两套统一结构:(供 PWA/relay 展示的 meta 结构, 供回填模型的 raw 结构)。"""
+    """把缓冲转成两套统一结构:(供 PWA/relay 展示的 meta 结构, 供回填模型的 raw 结构)。
+
+    槽位级去重:网关被截断续写时可能把同一次工具调用在新一代里原样重发
+    (只发 tool_calls、不重发 role/正文,绕开流内重生检测),缓冲里出现两个
+    名字+参数完全相同的槽位。模型概念上只调用了一次,这里只保留最后一槽——
+    否则工具会被执行两次、PWA 折叠块出现两条一模一样的调用。"""
     parsed: list[dict[str, Any]] = []
     raw: list[dict[str, Any]] = []
+    seen: dict[str, int] = {}   # 签名 -> 在 parsed/raw 里的下标
     for tc in buf:
         name = (tc.get("name") or "").strip()
         if not name:
             continue  # 跳过流式解析产生的空 name 幽灵 tool_call
-        try:
-            args = json.loads(tc.get("arguments_buf") or "{}")
-        except (json.JSONDecodeError, TypeError):
-            args = {}
-        parsed.append({"name": name, "input": args})
-        raw.append({
+        args = _parse_tool_args(tc.get("arguments_buf") or "")
+        sig = name + "\n" + _canon_args(args)
+        entry = {"name": name, "input": args}
+        raw_entry = {
             "id": tc.get("id", ""),
             "type": "function",
-            "function": {"name": name, "arguments": tc.get("arguments_buf", "{}")},
-        })
+            "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)},
+        }
+        if sig in seen:
+            # 同一次调用的重发副本:用最新一槽(参数更可能完整)顶替原位,不新增
+            pos = seen[sig]
+            parsed[pos] = entry
+            raw[pos] = raw_entry
+            continue
+        seen[sig] = len(parsed)
+        parsed.append(entry)
+        raw.append(raw_entry)
     return parsed, raw
 
 
@@ -1763,14 +1823,8 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
                 raise _GenerationCancelled()
             fn = call.get("function") or {}
             tool_name = str(fn.get("name") or "")
-            try:
-                args = json.loads(fn.get("arguments") or "{}")
-            except (json.JSONDecodeError, TypeError):
-                args = {}
-            try:
-                signature = tool_name + "\n" + json.dumps(args, ensure_ascii=False, sort_keys=True)
-            except (TypeError, ValueError):
-                signature = tool_name + "\n" + str(fn.get("arguments") or "")
+            args = _parse_tool_args(fn.get("arguments") or "")
+            signature = tool_name + "\n" + _canon_args(args)
             if signature in executed:
                 content = executed[signature]
                 print(f"[api_loop:tool_loop] duplicate call skipped (reusing first result): {tool_name}")

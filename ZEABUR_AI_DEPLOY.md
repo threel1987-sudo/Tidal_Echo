@@ -132,10 +132,13 @@ RELAY_ALLOW_ORIGINS=https://example.zeabur.app
 
 ```env
 HISTORY_N=24
-LLM_MAX_TOKENS=2000
 LLM_TEMPERATURE=0.7
 LOOP_STREAM=1
 ```
+
+> 不要设置 `LLM_MAX_TOKENS`（留空/不写 = 自动跟随模型默认上限）。带思考链的模型被
+> `max_tokens` 截断后，中转网关常会在同一条流里自动续写第二次生成：上游扣两次费、
+> 思考链出现两版、工具调用被重发叠加。确需限制输出时再到设置页显式配置。
 
 MCP 工具自动探测启用；模型工具调用统一走原生 tools 参数，无需额外配置。
 
