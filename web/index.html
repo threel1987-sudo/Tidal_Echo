@@ -547,23 +547,37 @@
   }
   .row.grouped{ margin-top: clamp(4px, 0.8vw, 8px); }
   .row.human{ justify-content: flex-end; }
-  .row.ai{ justify-content: flex-start; padding-left: calc(var(--avatar-size) + clamp(10px, 1.6vw, 16px)); }
-  .row.ai::before{
-    content:"";
-    position:absolute;
-    left:0;
-    top: clamp(5px, 1vw, 9px);
-    width: var(--avatar-size);
-    height: var(--avatar-size);
+  .row.ai{ justify-content: flex-start; flex-direction: column; align-items: flex-start; gap: 6px; }
+  /* AI 每轮头部:头像+名字+时间,盖在整轮内容(思考链/工具卡/气泡)上方,气泡不再被头像挤窄 */
+  .msg-head{
+    display: flex; align-items: center; gap: 9px;
+    margin-left: 2px; user-select: none;
+  }
+  .msg-head .msg-avatar{
+    width: calc(var(--avatar-size) * 0.8);
+    height: calc(var(--avatar-size) * 0.8);
     border-radius: 50%;
     background-image: var(--avatar-default);
     background-size: cover;
     background-position: center;
-    box-shadow: 0 12px 24px rgba(24,46,67,0.14);
+    box-shadow: 0 8px 16px rgba(24,46,67,0.12);
+    flex: none;
+  }
+  .msg-head-text{ display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .msg-name{
+    font-family: var(--font-cn);
+    font-weight: 700; line-height: 1.25;
+    font-size: calc(clamp(13px, 1.5vw, 15px) * var(--fs-scale, 1));
+    color: var(--text);
+  }
+  .msg-time{
+    font-family: var(--font-en), var(--font-cn);
+    font-size: clamp(10.5px, 1.2vw, 12px); line-height: 1.25;
+    color: var(--text-faint);
   }
 
   .bubble{
-    max-width: min(85vw, 560px);
+    max-width: min(92vw, 560px);
     padding: clamp(8px, 1.05vw, 12px) clamp(13px, 1.65vw, 18px) clamp(8px, 1.1vw, 13px);
     border-radius: var(--bubble-radius);
     position: relative;
@@ -881,7 +895,7 @@
      视觉与 thinking 同一族(--think-* 配色),但更小、更收,贴在头像缝隙里,不抢气泡 ── */
   .row.act{
     justify-content: flex-start;
-    padding-left: calc(var(--avatar-size) + clamp(10px, 1.6vw, 16px));
+    padding-left: 2px;
     padding-right: clamp(12px, 4vw, 40px);
     margin-top: clamp(4px, 0.9vw, 9px);
     margin-bottom: clamp(4px, 0.9vw, 9px);
@@ -1040,6 +1054,25 @@
   .newmsg-pill.show{ opacity: 1; pointer-events: auto; transform: translate3d(-50%, calc(-1 * var(--keyboard-offset, 0px)), 0); }
   .newmsg-pill svg{ width: 15px; height: 15px; flex: none; }
   @media (prefers-reduced-motion: reduce){ .newmsg-pill{ transition: opacity .2s ease; } }
+
+  /* ── 快速回顶/回底:右侧悬浮小圆钮 ── */
+  .scroll-jump{
+    position: fixed; right: 14px; z-index: 90;
+    width: 38px; height: 38px; border-radius: 50%;
+    border: none; background: rgba(34, 46, 60, .42); color: rgba(255,255,255,.85);
+    display: grid; place-items: center; cursor: pointer;
+    -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2);
+    box-shadow: 0 6px 18px rgba(18, 28, 40, .22);
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s ease, transform .22s ease;
+    transform: translateY(6px);
+  }
+  .scroll-jump.show{ opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .scroll-jump:active{ transform: scale(.92); }
+  .scroll-jump svg{ width: 18px; height: 18px; }
+  #jumpTopBtn{ top: calc(var(--header-h) + env(safe-area-inset-top) + 18px); }
+  #jumpBottomBtn{ bottom: calc(clamp(78px, 13vw, 96px) + env(safe-area-inset-bottom) + 18px); }
+  @media (prefers-reduced-motion: reduce){ .scroll-jump{ transition: opacity .2s ease; } }
 
   /* ── Login ── */
   .login{
@@ -1600,7 +1633,6 @@
     .avatar{ right: 16px; top: calc(env(safe-area-inset-top) + 16px); }
     .row{ margin-top: 18px; }
     .row.grouped{ margin-top: 8px; }
-    .row.ai{ padding-left: 42px; }
     .bubble{ max-width: min(86vw, 560px); font-size: calc(14.5px * var(--fs-scale, 1)); line-height: 1.56; padding: 8px 13px 8px; }
     .meta-card{ max-width: min(86vw, 560px); }
     .meta{ font-size: 11px; margin-left: 8px; }
@@ -2499,6 +2531,13 @@
   <button class="newmsg-pill" id="newMsgBtn" type="button" aria-label="回到最新消息">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></svg>
     <span>新消息</span>
+  </button>
+  <!-- ── 快速回顶/回底:右侧悬浮小圆钮,随滚动位置出现 ── -->
+  <button class="scroll-jump" id="jumpTopBtn" type="button" aria-label="回到顶部">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+  </button>
+  <button class="scroll-jump" id="jumpBottomBtn" type="button" aria-label="回到底部">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
   </button>
   <!-- ── 多选消息工具条(勾选多条后显示) ── -->
   <div class="select-bar" id="selectBar" aria-hidden="true">
@@ -6644,8 +6683,8 @@ function findRenderedMessageRow(key){
   return scrollEl.querySelector(`[data-message-key="${cssEscape(key)}"]`);
 }
 
-function fillMeta(metaEl, ts, isAn, usage){
-  let html = `<span>${fmtTime(ts)}</span>`;
+function fillMeta(metaEl, ts, isAn, usage, showTime = true){
+  let html = showTime ? `<span>${fmtTime(ts)}</span>` : "";
   if (isAn) html += `<span class="tick">✓✓</span>`;
   if (!isAn && usage) {
     // 兼容两种命名:归一化后的 input/output_tokens,以及老消息里透传的 prompt/completion_tokens
@@ -6657,6 +6696,7 @@ function fillMeta(metaEl, ts, isAn, usage){
     else if (total > 0) html += `<span class="tok">${total.toLocaleString()} tok</span>`;
   }
   metaEl.innerHTML = html;
+  metaEl.style.display = html ? "" : "none";   // 头部已带时间的 AI 行,meta 可能全空 → 收掉左边距不留尾缝
 }
 // 发送中的小时钟:两根指针绕表心转(SMIL,旋转中心写死(12,12),不依赖 transform-box,iOS 稳)。
 // reduce-motion 时给一只静止的钟。状态转 sent 后此节点按签名重建 → 同位换成 ✓✓。
@@ -6978,6 +7018,19 @@ function makeMessage(rowData){
     row.addEventListener("animationend", () => row.classList.remove(cls), { once:true });
   }
 
+  // AI 消息:每组第一条在整轮内容(思考链/工具卡/气泡)上方放「头像+名字+时间」头部
+  const aiHead = m.from === "ai" && !rowData.grouped;
+  if (aiHead){
+    const remark = (localStorage.getItem(REMARK_KEY) || "").trim();
+    const head = document.createElement("div");
+    head.className = "msg-head";
+    head.innerHTML =
+      `<div class="msg-avatar"></div>` +
+      `<div class="msg-head-text"><div class="msg-name">${escapeHtml(remark || AI_NAME)}</div>` +
+      `<div class="msg-time">${fmtTime(m.ts)}</div></div>`;
+    row.appendChild(head);
+  }
+
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   const atts = (m.meta && Array.isArray(m.meta.attachments)) ? m.meta.attachments : [];
@@ -7011,7 +7064,7 @@ function makeMessage(rowData){
       inputEl.dispatchEvent(new Event("input"));
       doSend();
     });
-  }else fillMeta(metaEl, m.ts, m.from === "human", m.meta && m.meta.api && m.meta.api.usage);
+  }else fillMeta(metaEl, m.ts, m.from === "human", m.meta && m.meta.api && m.meta.api.usage, !aiHead);
   row.appendChild(bubble);
   // reaction chips — AI poke (one-way: AI → you), rendered only under your own bubbles; not under the AI's
   const reactions = (m.from === "human" && m.meta && m.meta.reactions && typeof m.meta.reactions === "object") ? m.meta.reactions : null;
@@ -8069,6 +8122,7 @@ scrollEl.addEventListener("scroll", () => {
   // 只在「物化顶部已到 virtualRows[0]」时才从服务器取更早(否则上方还有内存里的行,recenter 物化即可,不必联网)
   if ((virtualRows.length <= DOM_WINDOW || domStart === 0) && top < OLDER_LOAD_THRESHOLD) loadOlderMessages();
   if (nearBottom()) hideNewMsgPill();
+  updateJumpBtns();
   // 滚动期间不 render、不写 scrollTop,完全交给原生滚动 → 不抖;窗口调整推迟到 onScrollIdle
 }, { passive:true });
 
@@ -8076,6 +8130,30 @@ scrollEl.addEventListener("scroll", () => {
 function showNewMsgPill(){ if (newMsgBtn) newMsgBtn.classList.add("show"); }
 function hideNewMsgPill(){ if (newMsgBtn) newMsgBtn.classList.remove("show"); }
 if (newMsgBtn) newMsgBtn.addEventListener("click", () => { hideNewMsgPill(); scrollToBottom({ smooth:true }); });
+
+/* ════════════ 快速回顶 / 回底 ════════════ */
+const jumpTopBtn = document.getElementById("jumpTopBtn");
+const jumpBottomBtn = document.getElementById("jumpBottomBtn");
+function updateJumpBtns(){
+  if (!jumpTopBtn || !jumpBottomBtn) return;
+  const distBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+  jumpTopBtn.classList.toggle("show", scrollEl.scrollTop > 480);
+  jumpBottomBtn.classList.toggle("show", distBottom > 640);
+}
+function scrollToTop(){
+  // 回收态:窗口没贴顶时直接 scrollTop=0 会落进 topSpacer 空白 → 先瞬移到 0,再 recenter 物化最顶那批
+  const topMaterialized = virtualRows.length <= DOM_WINDOW || domStart === 0;
+  if (!topMaterialized){
+    scrollEl.scrollTop = 0;
+    doRecenterWindow();
+    return;
+  }
+  if (scrollEl.scrollTo) scrollEl.scrollTo({ top: 0, behavior: "smooth" });
+  else scrollEl.scrollTop = 0;
+}
+if (jumpTopBtn) jumpTopBtn.addEventListener("click", scrollToTop);
+if (jumpBottomBtn) jumpBottomBtn.addEventListener("click", () => scrollToBottom({ smooth:true }));
+updateJumpBtns();
 
 /* ════════════ IndexedDB 近端缓存 ════════════ */
 function openMessageDb(){
