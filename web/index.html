@@ -147,8 +147,9 @@
     --motion-fast: 150ms;
     --motion-normal: 260ms;
     --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
-    /* composer 占据的底部区域(含安全区/键盘):scroll 底 padding 与边缘渐隐共用同一来源,保持对齐 */
-    --composer-zone: calc(var(--composer-h) + 16px + env(safe-area-inset-bottom) + var(--keyboard-offset));
+    /* composer 占据的底部区域(含安全区/键盘):scroll 底 padding 与边缘渐隐共用同一来源,保持对齐。
+       额外 +20px 余量:composer 内容(附件预览等)可能超过 --composer-h,防止消息被遮。 */
+    --composer-zone: calc(var(--composer-h) + 36px + env(safe-area-inset-bottom) + var(--keyboard-offset));
     --edge-fade-top: clamp(24px, 5vw, 52px);
     --edge-fade-tail: clamp(16px, 3vw, 30px);
     /* profile / settings — frosted glass, blends into the wallpaper */
@@ -216,7 +217,8 @@
   .wall::after{
     content:""; position:absolute; inset:0; background: var(--scrim); pointer-events:none;
   }
-  .topbar, .scroll, .composer{ position: relative; z-index: 1; }
+  .topbar, .scroll{ position: relative; z-index: 1; }
+  .composer{ position: fixed; z-index: 100; }
 
   /* ── Header (floating frosted pill + corner avatar) ── */
   .topbar{
@@ -956,8 +958,9 @@
     width: min(100vw, var(--ref-width));
     margin: 0 auto;
     display:flex; align-items:center; gap: clamp(6px, 1vw, 12px);
-    background: transparent; border:none;
-    padding: 0 var(--side-pad) clamp(10px, 1.6vw, 18px);
+    background: linear-gradient(to top, rgba(5,13,20,.92) 0%, rgba(5,13,20,.75) 55%, transparent 100%);
+    border:none;
+    padding: 20px var(--side-pad) clamp(10px, 1.6vw, 18px);
     padding-bottom: calc(clamp(10px, 1.6vw, 18px) + env(safe-area-inset-bottom));
     transform: translate3d(0, calc(-1 * var(--keyboard-offset)), 0);
     -webkit-transform: translate3d(0, calc(-1 * var(--keyboard-offset)), 0);
@@ -1449,24 +1452,50 @@
     width:15px; height:15px; flex:none;
     accent-color: var(--slider-thumb);
   }
-  .inject-entry{
-    border:1px solid var(--card-line);
-    border-radius:14px; padding:10px 12px; margin:6px 0;
-    background: var(--card-bg);
+  /* ── 指令注入:条目列表(标题+开关) + 详情编辑 ── */
+  .inject-list{ display:grid; gap:6px; margin:6px 0; }
+  .inject-item{
+    display:flex; align-items:center; gap:10px;
+    border:1px solid var(--card-line); border-radius:14px;
+    background: var(--card-bg); padding:10px 12px;
+    cursor:pointer; transition: background .15s ease;
   }
-  .inject-entry-head{
-    display:flex; align-items:center; gap:8px; margin-bottom:7px;
+  .inject-item:active{ background: var(--row-press); }
+  .inject-item-toggle{
+    flex:none; width:18px; height:18px; accent-color: var(--accent); cursor:pointer;
   }
-  .inject-entry-title{
+  .inject-item-title{
+    flex:1; min-width:0; font-size:14px; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .inject-item-chevron{
+    flex:none; color:var(--text-faint); font-size:16px; line-height:1;
+  }
+  .inject-detail{ display:none; }
+  .inject-detail.active{ display:block; }
+  .inject-detail-head{
+    display:flex; align-items:center; gap:8px; margin-bottom:10px;
+  }
+  .inject-detail-back{
+    flex:none; border:none; background:transparent; color:var(--accent);
+    font-size:20px; line-height:1; padding:4px 8px 4px 0; cursor:pointer;
+  }
+  .inject-detail-title-input{
     flex:1; min-width:0; padding:8px 10px; border-radius:10px;
     border:1px solid var(--field-line); background:var(--field-bg);
-    color:var(--text); font:inherit; font-size:13px; outline:none;
+    color:var(--text); font:inherit; font-size:14px; outline:none;
   }
-  .inject-entry-del{
+  .inject-detail-del{
     flex:none; border:none; background:transparent; color:var(--text-soft);
-    font-size:12px; padding:6px 8px; cursor:pointer;
+    font-size:12px; padding:6px 10px; cursor:pointer; border-radius:8px;
   }
-  .inject-entry-del:hover{ color:var(--text); }
+  .inject-detail-del:hover{ color:#ff6b6b; background:rgba(255,107,107,.1); }
+  .inject-detail-content{
+    width:100%; min-height:100px; padding:10px 12px; border-radius:12px;
+    border:1px solid var(--field-line); background:var(--field-bg);
+    color:var(--text); font:inherit; font-size:14px; line-height:1.5;
+    outline:none; resize:vertical;
+  }
 
   /* ── 空间状态:聊天页顶部胶囊 + 切换浮层 + 房间列表 ── */
   .presence-capsule{
@@ -2782,9 +2811,18 @@
             <input id="injectEnabledInput" type="checkbox">
             <span>注入开启（保存后，对之后的新消息生效）</span>
           </label>
-          <div class="config-field-label">规则条目 <i class="info-i" title="标题可选、内容必填；多条全部注入。适合放常驻规则、背景设定、格式要求等。">i</i></div>
-          <div id="injectEntriesList"></div>
+          <div class="config-field-label">规则条目 <i class="info-i" title="每条可独立开关；点标题进入详情编辑内容或删除。内容必填，标题留空则显示「未命名」。">i</i></div>
+          <div id="injectEntriesList" class="inject-list"></div>
           <button class="config-action ghost" id="injectAddBtn" type="button">＋ 添加条目</button>
+          <!-- 详情编辑视图(点列表项进入) -->
+          <div id="injectDetailView" class="inject-detail">
+            <div class="inject-detail-head">
+              <button class="inject-detail-back" id="injectDetailBackBtn" type="button" aria-label="返回列表">‹</button>
+              <input class="inject-detail-title-input" id="injectDetailTitleInput" type="text" placeholder="条目标题（可选）">
+              <button class="inject-detail-del" id="injectDetailDelBtn" type="button">删除</button>
+            </div>
+            <textarea class="inject-detail-content" id="injectDetailContentInput" placeholder="把要注入的规则 / 背景设定 / 格式要求贴在这里…"></textarea>
+          </div>
         </div>
         <div class="config-actions"><button class="config-action primary" id="injectSaveBtn" type="button">保存注入包</button></div>
         <div class="push-hint" id="injectConfigHint"></div>
@@ -4296,38 +4334,71 @@ function applyMaxTokensConfig(value){
     setParamSlider(maxTokensInput, value, "2000");
   }
 }
-function injectEntryElement(entry){
-  const box = document.createElement("div");
-  box.className = "inject-entry";
-  const head = document.createElement("div");
-  head.className = "inject-entry-head";
-  const title = document.createElement("input");
-  title.type = "text";
-  title.className = "inject-entry-title";
-  title.placeholder = "条目标题（可选）";
-  title.value = (entry && entry.title) || "";
-  const del = document.createElement("button");
-  del.type = "button";
-  del.className = "inject-entry-del";
-  del.textContent = "删除";
-  del.addEventListener("click", () => box.remove());
-  head.append(title, del);
-  const content = document.createElement("textarea");
-  content.className = "config-textarea";
-  content.rows = 3;
-  content.placeholder = "把要注入的规则 / 背景设定 / 格式要求贴在这里…";
-  content.value = (entry && entry.content) || "";
-  box.append(head, content);
-  return box;
+/* ── 指令注入:列表(标题+开关) ↔ 详情(编辑/删除) ── */
+let injectEntries = [];       // 当前编辑中的条目副本 [{title,content,enabled}]
+let injectDetailIndex = null; // 详情视图正在编辑的索引,null=列表模式
+const injectDetailView = $("#injectDetailView"), injectDetailBackBtn = $("#injectDetailBackBtn"),
+      injectDetailTitleInput = $("#injectDetailTitleInput"), injectDetailDelBtn = $("#injectDetailDelBtn"),
+      injectDetailContentInput = $("#injectDetailContentInput");
+
+function injectItemElement(entry, idx){
+  const item = document.createElement("div");
+  item.className = "inject-item";
+  item.dataset.idx = idx;
+  const toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.className = "inject-item-toggle";
+  toggle.checked = entry.enabled !== false;
+  toggle.addEventListener("click", (e) => e.stopPropagation());
+  toggle.addEventListener("change", () => { entry.enabled = toggle.checked; });
+  const title = document.createElement("span");
+  title.className = "inject-item-title";
+  title.textContent = (entry.title || "").trim() || "未命名";
+  const chev = document.createElement("span");
+  chev.className = "inject-item-chevron";
+  chev.textContent = "›";
+  item.append(toggle, title, chev);
+  item.addEventListener("click", () => openInjectDetail(idx));
+  return item;
 }
-function renderInjectEntries(entries){
+function renderInjectEntries(){
   if (!injectEntriesList) return;
   injectEntriesList.textContent = "";
-  (entries || []).forEach(entry => injectEntriesList.appendChild(injectEntryElement(entry)));
+  injectEntries.forEach((entry, idx) => injectEntriesList.appendChild(injectItemElement(entry, idx)));
 }
+function openInjectDetail(idx){
+  injectDetailIndex = idx;
+  const entry = injectEntries[idx];
+  if (!entry) return;
+  injectDetailTitleInput.value = entry.title || "";
+  injectDetailContentInput.value = entry.content || "";
+  injectEntriesList.style.display = "none";
+  injectAddBtn.style.display = "none";
+  injectDetailView.classList.add("active");
+}
+function closeInjectDetail(){
+  // 返回前把详情里的修改写回数组
+  if (injectDetailIndex !== null && injectEntries[injectDetailIndex]){
+    injectEntries[injectDetailIndex].title = injectDetailTitleInput.value.trim();
+    injectEntries[injectDetailIndex].content = injectDetailContentInput.value;
+  }
+  injectDetailIndex = null;
+  injectDetailView.classList.remove("active");
+  injectEntriesList.style.display = "";
+  injectAddBtn.style.display = "";
+  renderInjectEntries();
+}
+injectDetailBackBtn?.addEventListener("click", closeInjectDetail);
+injectDetailDelBtn?.addEventListener("click", () => {
+  if (injectDetailIndex !== null){
+    injectEntries.splice(injectDetailIndex, 1);
+  }
+  closeInjectDetail();
+});
 function updateInjectEntryStatus(enabled, count){
   if (!injectEntryStatus) return;
-  injectEntryStatus.textContent = enabled ? `开启 · ${count} 条` : "关闭";
+  const on = injectEntries.filter(e => e.enabled !== false).length;
+  injectEntryStatus.textContent = enabled ? `开启 · ${on}/${count} 条启用` : "关闭";
 }
 async function loadInjectConfig(){
   try{
@@ -4336,8 +4407,10 @@ async function loadInjectConfig(){
     const cfg = await r.json();
     const inj = cfg.injections || {};
     if (injectEnabledInput) injectEnabledInput.checked = !!inj.enabled;
-    renderInjectEntries(inj.entries || []);
-    updateInjectEntryStatus(!!inj.enabled, (inj.entries || []).length);
+    injectEntries = (inj.entries || []).map(e => ({ title: e.title || "", content: e.content || "", enabled: e.enabled !== false }));
+    closeInjectDetail(); // 重置到列表模式
+    renderInjectEntries();
+    updateInjectEntryStatus(!!inj.enabled, injectEntries.length);
   }catch{}
 }
 function renderProactiveStatus(p){
@@ -4995,23 +5068,22 @@ clearCacheBtn?.addEventListener("click", async () => {
   setTimeout(() => location.reload(), 600);
 });
 injectAddBtn?.addEventListener("click", () => {
-  if (!injectEntriesList) return;
-  const el = injectEntryElement({});
-  injectEntriesList.appendChild(el);
-  const t = el.querySelector(".inject-entry-title");
-  if (t) t.focus();
+  injectEntries.push({ title: "", content: "", enabled: true });
+  renderInjectEntries();
+  openInjectDetail(injectEntries.length - 1);
+  injectDetailTitleInput?.focus();
 });
 injectSaveBtn?.addEventListener("click", async () => {
   const hint = injectConfigHint;
   const enabled = !!injectEnabledInput?.checked;
-  const entries = [];
-  if (injectEntriesList){
-    injectEntriesList.querySelectorAll(".inject-entry").forEach(box => {
-      const title = box.querySelector(".inject-entry-title")?.value?.trim() || "";
-      const content = box.querySelector("textarea")?.value?.trim() || "";
-      if (title || content) entries.push({ title, content });
-    });
+  // 若正在详情里编辑,先写回数组
+  if (injectDetailIndex !== null && injectEntries[injectDetailIndex]){
+    injectEntries[injectDetailIndex].title = injectDetailTitleInput.value.trim();
+    injectEntries[injectDetailIndex].content = injectDetailContentInput.value;
   }
+  const entries = injectEntries
+    .filter(e => (e.title || "").trim() || (e.content || "").trim())
+    .map(e => ({ title: e.title, content: e.content, enabled: e.enabled }));
   const ok = await saveLoopConfig({ injections: { enabled, entries } }, hint);
   if (ok) updateInjectEntryStatus(enabled, entries.length);
 });
