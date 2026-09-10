@@ -1939,6 +1939,56 @@ def _dedupe_mcp_result(result: Any) -> Any:
     return result
 
 
+# ── 上游瞬时故障重试 ────────────────────────────────────────────────────────
+# 中转网关在长思考/工具续轮时偶发 5xx(上游连接被掐),429 也可能只是短时限流。
+# 直接放弃整条路由 = 把一次抖动变成一次失败(单路由用户尤其没有别的路由可换)。
+# 同路由短退避重试 LOOP_CHAT_RETRY_TIMES 次(默认 2,退避 5s/10s),仍失败再走路由 fallback。
+_LOOP_CHAT_RETRY_TIMES = max(0, int(os.environ.get("LOOP_CHAT_RETRY_TIMES", "2") or 2))
+_TRANSIENT_HTTP = {429, 500, 502, 503, 504}
+
+
+async def _interruptible_sleep(delay: float, cancel_ev: asyncio.Event | None) -> None:
+    """退避等待,期间收到停止信号立刻中止(不傻等)。"""
+    if cancel_ev is None:
+        await asyncio.sleep(delay)
+        return
+    try:
+        await asyncio.wait_for(cancel_ev.wait(), timeout=delay)
+    except asyncio.TimeoutError:
+        return
+    raise _GenerationCancelled()
+
+
+async def _chat_with_retry(route: dict[str, Any], messages: list[dict[str, Any]], *, tools: list[dict[str, Any]] | None = None, tag: str = "", **kw: Any) -> dict[str, Any]:
+    """chat_once 的瞬时故障重试壳。
+
+    重试前回调 on_restart 清 PWA 草稿:上一跳可能已流出半截思考/正文,
+    重试会重新生成完整内容,不清草稿会把两截拼在一起。
+    """
+    cancel_ev = kw.get("cancel_ev")
+    on_restart = kw.get("on_restart")
+    for retry_no in range(_LOOP_CHAT_RETRY_TIMES + 1):
+        try:
+            return await chat_once(route, messages, tools=tools, **kw)
+        except _GenerationCancelled:
+            raise
+        except Exception as exc:
+            transient = (isinstance(exc, HTTPException) and exc.status_code in _TRANSIENT_HTTP) or \
+                isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
+            if not transient or retry_no >= _LOOP_CHAT_RETRY_TIMES:
+                raise
+            delay = 5.0 * (2 ** retry_no)
+            code = f"HTTP {exc.status_code}" if isinstance(exc, HTTPException) else type(exc).__name__
+            print(f"[api_loop:chat] transient {code}{tag}, same-route retry {retry_no + 1}/{_LOOP_CHAT_RETRY_TIMES} in {delay:.0f}s", flush=True)
+            if on_restart is not None:
+                try:
+                    await on_restart()
+                except Exception:
+                    pass
+            await _interruptible_sleep(delay, cancel_ev)
+    raise RuntimeError("unreachable")
+
+
 # ── 模型调用主入口:多模型 fallback ─────────────────────────────────────────
 async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", session_id: str = "", emit_stream: bool = False, on_thinking=None, on_restart=None, cancel_ev: asyncio.Event | None = None) -> dict[str, Any]:
     """模型调用主入口:main_chain 顺次尝试,原生 tools + MCP 单路径。
@@ -1949,6 +1999,7 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
     """
     tried = []
     last_error = ""
+    partials: dict[str, Any] = {}
     all_tools = await mcp_tools()
     if all_tools:
         print(f"[api_loop:tools] {len(all_tools)} tools → tool_loop: {[t['function']['name'] for t in all_tools][:30]}", flush=True)
@@ -1971,21 +2022,30 @@ async def run_model(messages: list[dict[str, Any]], *, stream_id: str = "", sess
                         "api_session": session_id,
                     })
 
-            out = await chat_once(route, messages, on_thinking=on_thinking, sink=sink, on_restart=on_restart, cancel_ev=cancel_ev, session_id=session_id)
+            out = await _chat_with_retry(route, messages, on_thinking=on_thinking, sink=sink, on_restart=on_restart, cancel_ev=cancel_ev, session_id=session_id)
             out["model"] = route.get("model")
             out["tried"] = tried[:-1]
             return out
         except _GenerationCancelled:
             raise
         except HTTPException as exc:
+            partials = getattr(exc, "_partials", None) or partials
             if exc.status_code not in FALLBACK_CODES:
                 raise
             last_error = f"HTTP {exc.status_code}"
         except Exception as exc:
+            partials = getattr(exc, "_partials", None) or partials
             last_error = f"{type(exc).__name__}: {exc}"
     if last_error:
         print(f"[api_loop:run_model] all routes failed: last_error={last_error!r}, tried={tried!r}")
-    return {"text": "", "error": last_error or "all models failed", "tried": tried}
+    ret: dict[str, Any] = {"text": "", "error": last_error or "all models failed", "tried": tried}
+    # 工具循环半路死掉时,把已执行的工具调用/思考带回:PWA 保留工具叠块,
+    # 用户看到的是「动作做完了、话没说完」,而不是整段凭空消失。
+    if partials.get("tool_calls"):
+        ret["tool_calls"] = partials["tool_calls"]
+    if partials.get("thinking"):
+        ret["thinking"] = partials["thinking"]
+    return ret
 
 
 async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_tools: list[dict[str, Any]], *, on_thinking=None, on_restart=None, tried: list[str], cancel_ev: asyncio.Event | None = None, session_id: str = "") -> dict[str, Any]:
@@ -2001,7 +2061,19 @@ async def _tool_loop(route: dict[str, Any], messages: list[dict[str, Any]], all_
     executed: dict[str, str] = {}
     out: dict[str, Any] = {"text": "", "usage": {}}
     for round_idx in range(8):
-        out = await chat_once(route, msgs, tools=all_tools, on_thinking=on_thinking, on_restart=on_restart, cancel_ev=cancel_ev, session_id=session_id)
+        try:
+            out = await _chat_with_retry(route, msgs, tools=all_tools, on_thinking=on_thinking, on_restart=on_restart, cancel_ev=cancel_ev, session_id=session_id, tag=f" tool_round={round_idx}")
+        except _GenerationCancelled:
+            raise
+        except Exception as exc:
+            # 半路失败(如收尾那跳 502):已执行的工具调用和思考挂在异常上带给
+            # run_model——记忆写入等动作已经发生,痕迹不能丢;重试必须在这一层做,
+            # 若由 run_model 重启整个 _tool_loop,工具会被再执行一遍(重复写记忆)。
+            try:
+                exc._partials = {"tool_calls": collected[:], "thinking": first_thinking}  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            raise
         if round_idx == 0 and out.get("thinking"):
             first_thinking = out["thinking"]
         msg = out.get("message") or {}
@@ -2216,7 +2288,13 @@ async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *
     reply = (out.get("text") or "").strip()
     if not reply:
         error = str(out.get("error") or "").strip()
-        reply = f"API 调用失败：{error}" if error else "API 未返回回复内容。"
+        if out.get("tool_calls"):
+            # 工具循环半路断了:动作已经执行(叠块还在),只是收尾正文没生成。
+            reply = f"(连接断了一下:{error}。刚才的动作我都做完了,就是话没来得及说出口——你再叫我一句,我接着来。)"
+        elif error:
+            reply = f"(连接断了一下:{error},话没能说完。稍等片刻,再发一句试试。)"
+        else:
+            reply = "API 未返回回复内容。"
     meta = {
         "runtime": "api_loop",
         "model": out.get("model"),
@@ -2455,7 +2533,7 @@ async def loop_cancel(request: Request):
 if __name__ == "__main__":
     # 启动版本戳:排障时第一眼就能确认 pod 跑的是哪版代码(部署有没有生效)。
     # 改影响计费/流式行为的功能时顺手更新这个串。
-    print("[api_loop:boot] build=2026-09-08-attempt-break-fix+mcp-result-dedupe+ob-session-rotate+proactive-polish", flush=True)
+    print("[api_loop:boot] build=2026-09-10-transient-retry+tool-partials+cat-engine", flush=True)
     # access_log=False:ingest/配置轮询每次对话都会产生一堆 HTTP 行,把关键日志
     # (→POST / ✓done / tool_loop / restart)全淹了;relay 侧早已 --no-access-log。
     # 需要排障时再临时开,平时保持安静。
