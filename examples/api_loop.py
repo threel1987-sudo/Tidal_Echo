@@ -1393,18 +1393,24 @@ class _DeltaEmitter:
 # 路由级「不认 tools」记忆:(url, model) → 曾以 400/404/422 拒绝过 tools。
 _ROUTE_NO_TOOLS: set[tuple[str, str]] = set()
 
-# OB session 空闲轮换:OB 的语义召回去重/轮次注入/is_session_start 全部按 session
-# 记状态,一个万年不变的 session id 会让「关键词自动召回」在长会话里彻底失灵
-# (已实测:同一关键词,换新会话立刻召回,旧会话毫无动静)。
-# 模拟 Kelivo「新窗口」:同一聊天窗口内连续发言保持同一 OB session(上下文温度不断),
-# 空闲超过 LOOP_OB_SESSION_IDLE_MINUTES(默认 180 分钟)后下一条消息换新 id,
-# 召回与苏醒机制重新武装。
+# OB session id 策略:
+# - 设了 OB_SESSION_ID(比如 "main"):所有窗口共用这一个 id,人格温度全局连续
+#   (KELIVO 模式:不管哪个窗口聊,温度都接着昨天的)。推荐。
+# - 没设:每个 PWA 窗口映射到独立 id,且空闲超时后轮换(旧行为,会导致温度
+#   按窗口隔离 + 每天/每几小时重置,dashboard 会刷出多条记录)。
+_OB_SESSION_FIXED = str(os.environ.get("OB_SESSION_ID", "") or "").strip()
 _OB_SESSION_IDLE_S = max(30, int(os.environ.get("LOOP_OB_SESSION_IDLE_MINUTES", "180") or 180)) * 60
 _OB_SESSION_SLOTS: dict[str, dict[str, Any]] = {}
 
 
 def ob_session_id(base: str) -> str:
-    """把 PWA 会话 id 映射成带空闲轮换的 OB session id(见上方注释)。"""
+    """把 PWA 会话 id 映射成 OB session id。
+
+    若 OB_SESSION_ID 环境变量非空则直接返回该值(全局共享一份人格温度);
+    否则按窗口 base 映射 + 空闲轮换(历史行为,已不推荐——会让温度每天重置)。
+    """
+    if _OB_SESSION_FIXED:
+        return _OB_SESSION_FIXED
     now = time.time()
     slot = _OB_SESSION_SLOTS.get(base)
     if slot is None or (now - float(slot.get("last", 0.0))) > _OB_SESSION_IDLE_S:
