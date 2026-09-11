@@ -758,7 +758,7 @@ async def attachment_parts(atts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return parts
 
 
-def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def build_messages(text: str, *, before_id: int | None = None, session_id: str = "", use_context: bool = True, image_parts: list[dict[str, Any]] | None = None, history_override: int | None = None) -> list[dict[str, Any]]:
     system_text = persona()
     inj_on, inj_rows = injections()
     if inj_on and inj_rows:
@@ -775,7 +775,8 @@ def build_messages(text: str, *, before_id: int | None = None, session_id: str =
         system_text += "\n\n" + presence_block
     messages = [{"role": "system", "content": system_text}]
     if use_context:
-        for row in relay_rows(before_id, session_id, history_n()):
+        n = history_n() if history_override is None else max(0, int(history_override))
+        for row in relay_rows(before_id, session_id, n):
             content = str(row.get("text") or "").strip()
             if not content:
                 continue
@@ -2231,6 +2232,17 @@ async def _proactive_loop() -> None:
 
 
 # ── 入站消息处理(handle_ingest) ────────────────────────────────────────────
+def _looks_like_upstream_timeout(error: Any) -> bool:
+    """首字节超时类错误判定:run_model 耗尽所有路由后带回的 error 字符串。
+    命中:HTTP 5xx(含 OB gateway 60s 砍单返回的 502)和 httpx 各类 Timeout。"""
+    s = str(error or "")
+    if not s:
+        return False
+    if re.search(r"HTTP\s*5\d\d", s):
+        return True
+    return "timeout" in s.lower() or "timed out" in s.lower()
+
+
 async def handle_ingest(text: str, msg_id: int | None, session_id: str, *, dry: bool = False, attachments: list[dict[str, Any]] | None = None, stream_id: str | None = None) -> dict[str, Any]:
     stream_id = stream_id or ("api-" + uuid.uuid4().hex[:16])
     cancel_ev = None if dry else _cancel_event(stream_id)
@@ -2299,6 +2311,45 @@ async def _handle_ingest_inner(text: str, msg_id: int | None, session_id: str, *
         # 已取消的生成不再补 done 帧(relay 那边也会丢弃)。
         if thinking_stream is not None:
             await thinking_stream.close(done_frame=not cancelled)
+    if cancelled:
+        return {"ok": True, "cancelled": True, "api": {"runtime": "api_loop", "session": session_id}}
+    # 上游「首字节硬超时」自动降档:OB gateway 对上游是 httpx timeout=60s 写死,
+    # 上下文一大 prefill 超 60s 就被砍成 502,且此刻尚未流出任何内容。
+    # 这时把历史条数减半重试(64→32→16→8,保底 8),优先保住回复,不硬死在 502 上。
+    # 触发条件刻意收紧:仅在「什么都没流出来 + 错误像超时/502」时才降档,
+    # 半途断流(已有思考/工具/残稿)走原有「话没说完」路径,避免重复输出。
+    shrink_n = history_n()
+    while (
+        not cancelled
+        and not (out.get("text") or "").strip()
+        and not out.get("thinking") and not out.get("tool_calls")
+        and _looks_like_upstream_timeout(out.get("error"))
+        and shrink_n > 8
+    ):
+        prev_n, shrink_n = shrink_n, max(8, shrink_n // 2)
+        print(f"[api_loop:ctx-shrink] upstream timeout/502, retry with history {prev_n} → {shrink_n}", flush=True)
+        messages = build_messages(text, before_id=msg_id, session_id=session_id, use_context=True, image_parts=image_parts or None, history_override=shrink_n)
+        # 原 thinking emitter 已在 finally 里关闭;重试开一个新的(闭包按变量名懒读取,自动指向新实例)
+        if (not dry) and STREAM_OUTPUT:
+            thinking_stream = _DeltaEmitter(stream_id, session_id, kind="thinking")
+        try:
+            out = await run_model(
+                messages,
+                stream_id=stream_id,
+                session_id=session_id,
+                emit_stream=not dry,
+                on_thinking=_on_thinking,
+                on_restart=_on_stream_restart,
+                cancel_ev=cancel_ev,
+            )
+        except _GenerationCancelled:
+            cancelled = True
+            out = {"text": "", "cancelled": True}
+        except Exception as exc:
+            out = {"text": "", "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            if thinking_stream is not None:
+                await thinking_stream.close(done_frame=not cancelled)
     if cancelled:
         return {"ok": True, "cancelled": True, "api": {"runtime": "api_loop", "session": session_id}}
     if image_parts and not (out.get("text") or "").strip():
