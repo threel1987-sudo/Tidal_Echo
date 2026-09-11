@@ -388,6 +388,67 @@ def history_n() -> int:
         return HISTORY_N
 
 
+# ── 上下文窗口锚定 ─────────────────────────────────────────────────────────
+# 滑动窗口(每轮砍头加尾)会让 prompt 从第 2 条历史起就变 → 前缀缓存全部 miss,
+# 每轮都全量 prefill,窗口越大越慢(高峰撞上游 60s 超时)。锚定后窗口头部固定、
+# 只往后长,prompt 前缀在一段时期内逐字节稳定,缓存可命中;鼓出 MARGIN 条才重锚一次。
+# 锚只存内存:进程重启后首轮自动按最新 N 条重锚,无需持久化。
+_CTX_REANCHOR_MARGIN = 24
+_CTX_ANCHORS: dict[str, int] = {}   # session_id → 当前窗口最老那条的 relay 消息 id
+
+
+def relay_rows_since(oldest_id: int, before_id: int | None, session_id: str, cap: int) -> list[dict[str, Any]]:
+    """从 anchor 消息(含)往后按时间正序拿,最多 cap 条。过滤口径与 relay_rows 一致。"""
+    path = Path(RELAY_DB)
+    if not path.exists():
+        return []
+    params: list[Any] = [int(oldest_id)]
+    where = ["kind IN ('user','voice','reply')", "id >= ?"]
+    if before_id:
+        where.append("id < ?")
+        params.append(int(before_id))
+    if session_id:
+        where.append("json_extract(meta, '$.api_session') = ?")
+        params.append(session_id)
+    else:
+        where.append("(json_extract(meta, '$.api_session') IS NULL OR json_extract(meta, '$.api_session') = '')")
+    sql = (
+        "SELECT id, direction, kind, text, meta FROM messages "
+        f"WHERE {' AND '.join(where)} ORDER BY id ASC LIMIT ?"
+    )
+    params.append(max(0, cap))
+    with sqlite3.connect(str(path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _anchored_relay_rows(before_id: int | None, session_id: str, limit: int) -> list[dict[str, Any]]:
+    """优先返回「头部锚定」的窗口:与上一轮共享同一开头,只长不滑;鼓太大才重锚。"""
+    rows = relay_rows(before_id, session_id, limit)
+    if limit <= 0 or not rows:
+        _CTX_ANCHORS.pop(session_id, None)
+        return rows
+    oldest = int(rows[0].get("id") or 0)
+    anchor = _CTX_ANCHORS.get(session_id)
+    if anchor is None or anchor <= 0:
+        _CTX_ANCHORS[session_id] = oldest
+        return rows
+    if anchor == oldest:
+        return rows                     # 窗口头没动(无新消息),原样即可
+    if anchor > oldest:
+        # 异常情况(配置调小/消息被删导致窗口头后退):直接以当前窗口头重锚
+        _CTX_ANCHORS[session_id] = oldest
+        return rows
+    # anchor < oldest:锚在窗口上游 → 从锚往后全拿,前缀与上一轮完全一致
+    cap = limit + _CTX_REANCHOR_MARGIN + 1
+    grown = relay_rows_since(anchor, before_id, session_id, cap)
+    if not grown or len(grown) >= cap:
+        _CTX_ANCHORS[session_id] = oldest   # 鼓出 MARGIN 条了 → 重锚回最新窗口
+        return rows
+    return grown
+
+
 def persona() -> str:
     cfg = load_config()
     p = str(cfg.get("persona") or "").strip()
@@ -776,7 +837,9 @@ def build_messages(text: str, *, before_id: int | None = None, session_id: str =
     messages = [{"role": "system", "content": system_text}]
     if use_context:
         n = history_n() if history_override is None else max(0, int(history_override))
-        for row in relay_rows(before_id, session_id, n):
+        # 降档重试(history_override)要立刻拿到精确的小窗口,绕开锚定
+        rows = _anchored_relay_rows(before_id, session_id, n) if history_override is None else relay_rows(before_id, session_id, n)
+        for row in rows:
             content = str(row.get("text") or "").strip()
             if not content:
                 continue
