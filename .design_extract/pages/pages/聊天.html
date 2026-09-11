@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>聊天 - 阿克</title>
+    <style id="theme-vars">
+/* @dark-only */
+/* Source: structured-spec */
+/* Project-local bridge: Motra library tokens + Tailwind semantic aliases */
+
+:root {
+  /* ── Reference & viewport ── */
+  --screen-height: 100vh;
+  --keyboard-offset: 0px;
+  --ios-pwa-bottom-bleed: 0px;
+  --ref-width: 941px;
+  --ref-height: 1672px;
+
+  /* ── Typography ── */
+  --font-en: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-cn: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-script: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --fs-scale: 1;
+
+  /* ── Wallpaper / assets ── */
+  --wall-light: url("../assets/beach.jpg");
+  --wall-harbor: url("../assets/beach.jpg");
+  --wall-default: var(--wall-light);
+  --menu-wall-light: url("../assets/beach.jpg");
+  --menu-wall-harbor: url("../assets/beach.jpg");
+  --menu-wall-default: var(--menu-wall-light);
+  --avatar-default: url("../assets/avatar-sea.jpg");
+  --wall: url("../assets/beach.jpg");
+
+  /* ── MOTRA · 星辰之语(深色海岸玻璃拟态) ── */
+  --bg: #050D14;
+  --header-bg: rgba(5, 13, 20, .00);
+  --hairline: rgba(255, 255, 255, .10);
+  --text: #F2F0EE;
+  --text-soft: #B8B8C0;
+  --text-faint: #808088;
+  --accent: #A8CCE0;
+  --accent-deep: #A8CCE0;
+  --accent-fg: #0A1620;
+  --send-bg: #A8CCE0;
+  --tick: #8EB8D0;
+  --danger: #E08A96;
+
+  /* Messages / bubbles */
+  --bubble-ai-bg: rgba(255, 255, 255, .14);
+  --bubble-ai-fg: #F2F0EE;
+  --bubble-ai-line: rgba(255, 255, 255, .08);
+  --bubble-human-bg: rgba(168, 204, 224, .26);
+  --bubble-human-fg: #F2F0EE;
+  --bubble-human-line: transparent;
+
+  /* Thinking / meta cards */
+  --think-flourish: rgba(168, 204, 224, .45);
+  --think-label: #A8CCE0;
+  --think-body: #B8B8C0;
+
+  /* Composer / fields */
+  --composer-bg: rgba(255, 255, 255, .12);
+  --field-bg: rgba(255, 255, 255, .12);
+  --field-line: rgba(255, 255, 255, .12);
+
+  /* Atmosphere */
+  --shadow: 0 18px 46px rgba(0, 0, 0, .28);
+  --shadow-soft: 0 14px 34px rgba(0, 0, 0, .20);
+  --scrim: linear-gradient(180deg, rgba(5, 13, 20, .55) 0%, rgba(5, 13, 20, .28) 30%, rgba(5, 13, 20, .28) 68%, rgba(5, 13, 20, .55) 100%);
+
+  /* ── Spacing ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── Border radius ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-bubble: clamp(14px, 2vw, 20px);
+
+  /* ── Shadows ── */
+  --shadow-1: 0 4px 12px rgba(0, 0, 0, .15);
+  --shadow-2: 0 14px 34px rgba(0, 0, 0, .20);
+  --shadow-3: 0 18px 46px rgba(0, 0, 0, .28);
+
+  /* ── Layout ── */
+  --header-h: clamp(56px, 10vw, 120px);
+  --side-pad: clamp(16px, 4vw, 40px);
+  --avatar-size: clamp(32px, 5vw, 48px);
+  --composer-h: clamp(44px, 6vw, 72px);
+  --composer-zone: calc(var(--composer-h) + 36px + env(safe-area-inset-bottom) + var(--keyboard-offset));
+  --edge-fade-top: clamp(24px, 5vw, 52px);
+  --edge-fade-tail: clamp(16px, 3vw, 30px);
+
+  /* ── Motion ── */
+  --motion-fast: 150ms;
+  --motion-normal: 260ms;
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── Profile / settings ── */
+  --card-bg: rgba(255, 255, 255, .14);
+  --card-line: rgba(255, 255, 255, .12);
+  --card-shadow: 0 10px 28px rgba(0, 0, 0, .25);
+  --seg-track: rgba(255, 255, 255, .10);
+  --seg-thumb: rgba(168, 204, 224, .30);
+  --seg-thumb-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+  --row-press: rgba(255, 255, 255, .08);
+  --slider-track: rgba(255, 255, 255, .16);
+  --slider-thumb: #A8CCE0;
+  --info-ring: rgba(168, 204, 224, .38);
+  --status-dot: #A8D8C0;
+
+  /* ── Sheet / modal shared ── */
+  --sheet-bg: rgba(16, 26, 36, .94);
+  --sheet-line: rgba(255, 255, 255, .14);
+  --sheet-hi: rgba(255, 255, 255, .16);
+  --sheet-scrim: rgba(0, 0, 0, .50);
+
+  /* ── Tailwind / semantic aliases (prefixless) ── */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--card-bg);
+  --card-foreground: var(--text);
+  --popover: var(--sheet-bg);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-fg);
+  --secondary: var(--card-bg);
+  --secondary-foreground: var(--text);
+  --muted: var(--text-soft);
+  --muted-foreground: var(--text-faint);
+  --accent: var(--accent);
+  --accent-foreground: var(--accent-fg);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--text);
+  --border: var(--hairline);
+  --input: var(--field-bg);
+  --ring: var(--accent);
+
+  /* ── Layer 3 portable aliases ── */
+  --color-bg: var(--bg);
+  --color-header-bg: var(--header-bg);
+  --color-surface: var(--card-bg);
+  --color-surface-container: var(--sheet-bg);
+  --color-text: var(--text);
+  --color-on-surface: var(--text);
+  --color-text-soft: var(--text-soft);
+  --color-on-surface-variant: var(--text-soft);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-primary: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-primary-hover: var(--accent-deep);
+  --color-accent-fg: var(--accent-fg);
+  --color-primary-foreground: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-hairline: var(--hairline);
+  --color-border: var(--hairline);
+  --color-field-bg: var(--field-bg);
+  --color-field-line: var(--field-line);
+  --color-card-bg: var(--card-bg);
+  --color-card-line: var(--card-line);
+  --color-card-shadow: var(--card-shadow);
+  --color-sheet-bg: var(--sheet-bg);
+  --color-sheet-line: var(--sheet-line);
+  --color-sheet-hi: var(--sheet-hi);
+  --color-sheet-scrim: var(--sheet-scrim);
+  --font-family-base: var(--font-cn);
+  --font-family-display: var(--font-en);
+  --font-family-script: var(--font-script);
+  --type-scale: var(--fs-scale);
+  --bubble-radius: clamp(14px, 2vw, 20px);
+  --radius-bubble: var(--bubble-radius);
+  --shadow-default: var(--shadow);
+  --motion-fast: var(--motion-fast);
+  --motion-normal: var(--motion-normal);
+  --ease-soft: var(--ease-soft);
+  --layout-header-h: var(--header-h);
+  --layout-side-pad: var(--side-pad);
+  --layout-avatar-size: var(--avatar-size);
+  --layout-composer-h: var(--composer-h);
+}
+
+@media (max-width: 520px) {
+  :root {
+    --side-pad: 16px;
+    --header-h: 68px;
+    --avatar-size: 32px;
+    --edge-fade-top: 10px;
+  }
+}
+    </style>
+    <style id="component-vars">
+/* ═══════════════════════════════════════════════════════════════
+   components.css — Design System Component Definitions
+   Auto-extracted from preview/component-*.html
+   DO NOT EDIT MANUALLY — regenerate via extract-components-css.mjs
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Avatar ────────────────────────────────────────────────── */
+.avatar { position: relative; display: inline-flex; flex-shrink: 0; width: var(--layout-avatar-size); height: var(--layout-avatar-size); background-color: var(--color-surface); background-image: var(--avatar-default); background-size: cover; background-position: center; overflow: hidden; }
+.avatar.circle { border-radius: 50%; }
+.avatar.rounded { border-radius: var(--radius-md); }
+.avatar.bordered { border: 1px solid var(--color-hairline); box-sizing: border-box; }
+.avatar.sm { width: 24px; height: 24px; }
+.avatar.md { width: var(--layout-avatar-size); height: var(--layout-avatar-size); }
+.avatar.lg { width: 64px; height: 64px; }
+.avatar.xl { width: 120px; height: 120px; }
+.avatar-status { position: absolute; right: 0; bottom: 0; width: 28%; height: 28%; min-width: 6px; min-height: 6px; background: var(--color-status-dot); border-radius: 50%; border: 2px solid var(--color-bg); box-sizing: border-box; }
+.avatar-hero { display: inline-flex; padding: 3px; border-radius: 50%; background: conic-gradient(from 180deg, var(--color-accent), var(--color-status-dot), var(--color-accent)); box-shadow: var(--shadow-3); }
+.avatar-hero .avatar { display: block; }
+
+/* ── Button ────────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: none; cursor: pointer; font-family: var(--font-family-base); font-weight: 500; border-radius: 999px; padding: 0 20px; min-width: 44px; height: 44px; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s, border-color .15s, filter .15s; }
+.btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.btn.primary { background: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary:active { filter: brightness(0.95); }
+.btn.secondary { background: transparent; border: 1px solid var(--color-hairline); color: var(--color-text); }
+.btn.secondary:hover { background: var(--row-press); }
+.btn.secondary:active { filter: brightness(0.95); }
+.btn.ghost { background: transparent; color: var(--color-text-soft); }
+.btn.ghost:hover { background: var(--row-press); }
+.btn.ghost:active { filter: brightness(0.95); }
+.btn.circle { border-radius: 50%; padding: 0; width: 44px; min-width: 44px; }
+.btn.sm { height: 32px; min-width: 32px; padding: 0 12px; font-size: 13px; }
+.btn.sm.circle { width: 32px; min-width: 32px; }
+.btn.md { height: 44px; min-width: 44px; padding: 0 20px; font-size: 15px; }
+.btn.md.circle { width: 44px; min-width: 44px; }
+.btn.lg { height: 56px; min-width: 56px; padding: 0 28px; font-size: 17px; }
+.btn.lg.circle { width: 56px; min-width: 56px; }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .4; cursor: not-allowed; pointer-events: none; }
+
+/* ── Message Bubble ────────────────────────────────────────── */
+.message-bubble { position: relative; max-width: 80%; padding: var(--space-3) var(--space-4); border-radius: var(--radius-bubble); line-height: 1.5; overflow-wrap: break-word; }
+.message-bubble.ai { align-self: flex-start; background: var(--color-bubble-ai-bg); color: var(--color-bubble-ai-fg); border: 1px solid var(--color-bubble-ai-line); }
+.message-bubble.human { align-self: flex-end; max-width: 78%; background: var(--color-bubble-human-bg); color: var(--color-bubble-human-fg); border: 1px solid var(--color-bubble-human-line); }
+.message-bubble .text { margin: 0; }
+.message-bubble .meta { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); font-size: 11px; color: var(--color-text-faint); }
+.message-bubble .meta .tick { width: 14px; height: 14px; flex-shrink: 0; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --radius-sm: var(--radius-sm);
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
+    --radius-xl: var(--radius-xl);
+  }
+  @layer base {
+    body { background: var(--background); color: var(--foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--background); }
+      .text-background { color: var(--background); }
+      .border-background { border-color: var(--background); }
+      .ring-background { --tw-ring-color: var(--background); }
+      .bg-foreground { background-color: var(--foreground); }
+      .text-foreground { color: var(--foreground); }
+      .border-foreground { border-color: var(--foreground); }
+      .ring-foreground { --tw-ring-color: var(--foreground); }
+      .bg-card { background-color: var(--card); }
+      .text-card { color: var(--card); }
+      .border-card { border-color: var(--card); }
+      .ring-card { --tw-ring-color: var(--card); }
+      .bg-card-foreground { background-color: var(--card-foreground); }
+      .text-card-foreground { color: var(--card-foreground); }
+      .border-card-foreground { border-color: var(--card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--card-foreground); }
+      .bg-popover { background-color: var(--popover); }
+      .text-popover { color: var(--popover); }
+      .border-popover { border-color: var(--popover); }
+      .ring-popover { --tw-ring-color: var(--popover); }
+      .bg-popover-foreground { background-color: var(--popover-foreground); }
+      .text-popover-foreground { color: var(--popover-foreground); }
+      .border-popover-foreground { border-color: var(--popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--popover-foreground); }
+      .bg-primary { background-color: var(--primary); }
+      .text-primary { color: var(--primary); }
+      .border-primary { border-color: var(--primary); }
+      .ring-primary { --tw-ring-color: var(--primary); }
+      .bg-primary-foreground { background-color: var(--primary-foreground); }
+      .text-primary-foreground { color: var(--primary-foreground); }
+      .border-primary-foreground { border-color: var(--primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--primary-foreground); }
+      .bg-secondary { background-color: var(--secondary); }
+      .text-secondary { color: var(--secondary); }
+      .border-secondary { border-color: var(--secondary); }
+      .ring-secondary { --tw-ring-color: var(--secondary); }
+      .bg-secondary-foreground { background-color: var(--secondary-foreground); }
+      .text-secondary-foreground { color: var(--secondary-foreground); }
+      .border-secondary-foreground { border-color: var(--secondary-foreground); }
+      .ring-secondary-foreground { --tw-ring-color: var(--secondary-foreground); }
+      .bg-muted { background-color: var(--muted); }
+      .text-muted { color: var(--muted); }
+      .border-muted { border-color: var(--muted); }
+      .ring-muted { --tw-ring-color: var(--muted); }
+      .bg-muted-foreground { background-color: var(--muted-foreground); }
+      .text-muted-foreground { color: var(--muted-foreground); }
+      .border-muted-foreground { border-color: var(--muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--muted-foreground); }
+      .bg-accent { background-color: var(--accent); }
+      .text-accent { color: var(--accent); }
+      .border-accent { border-color: var(--accent); }
+      .ring-accent { --tw-ring-color: var(--accent); }
+      .bg-accent-foreground { background-color: var(--accent-foreground); }
+      .text-accent-foreground { color: var(--accent-foreground); }
+      .border-accent-foreground { border-color: var(--accent-foreground); }
+      .ring-accent-foreground { --tw-ring-color: var(--accent-foreground); }
+      .bg-destructive { background-color: var(--destructive); }
+      .text-destructive { color: var(--destructive); }
+      .border-destructive { border-color: var(--destructive); }
+      .ring-destructive { --tw-ring-color: var(--destructive); }
+      .bg-destructive-foreground { background-color: var(--destructive-foreground); }
+      .text-destructive-foreground { color: var(--destructive-foreground); }
+      .border-destructive-foreground { border-color: var(--destructive-foreground); }
+      .ring-destructive-foreground { --tw-ring-color: var(--destructive-foreground); }
+      .bg-border { background-color: var(--border); }
+      .text-border { color: var(--border); }
+      .border-border { border-color: var(--border); }
+      .ring-border { --tw-ring-color: var(--border); }
+      .bg-input { background-color: var(--input); }
+      .text-input { color: var(--input); }
+      .border-input { border-color: var(--input); }
+      .ring-input { --tw-ring-color: var(--input); }
+      .bg-ring { background-color: var(--ring); }
+      .text-ring { color: var(--ring); }
+      .border-ring { border-color: var(--ring); }
+      .ring-ring { --tw-ring-color: var(--ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body>
+  <style>
+    /* Page-scoped critical layout: static, no JS-driven reflow */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: var(--font-family-base);
+      background: var(--bg) url('../assets/beach.jpg') center/cover no-repeat fixed;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: var(--scrim);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .chat-root {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .safe-top {
+      height: env(safe-area-inset-top);
+      min-height: 12px;
+      flex-shrink: 0;
+    }
+    .safe-bottom {
+      height: env(safe-area-inset-bottom);
+      min-height: 8px;
+      flex-shrink: 0;
+    }
+
+    /* Sticky glass nav bar */
+    .nav-bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: var(--header-h);
+      min-height: 56px;
+      padding: 0 var(--side-pad);
+      background: rgba(5, 13, 20, .65);
+      border-bottom: 1px solid var(--hairline);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+    .nav-back,
+    .nav-action {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      color: var(--text);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: background var(--motion-fast), transform var(--motion-fast) var(--ease-soft);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-back { left: var(--side-pad); }
+    .nav-action { right: var(--side-pad); }
+    .nav-back:hover,
+    .nav-action:hover { background: var(--row-press); }
+    .nav-back:active,
+    .nav-action:active { transform: scale(0.95); }
+    .nav-back svg,
+    .nav-action svg { width: 22px; height: 22px; stroke-width: 1.8; }
+    .nav-title-group {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .nav-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.02em;
+    }
+    .nav-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-soft);
+      background: rgba(255, 255, 255, .10);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background var(--motion-fast);
+      -webkit-tap-highlight-color: transparent;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .nav-status::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--status-dot);
+      box-shadow: 0 0 0 2px rgba(168, 216, 192, .25);
+    }
+    .nav-status:active { background: var(--row-press); }
+
+    /* Scrollable message area */
+    .messages-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .messages-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--side-pad) var(--space-5);
+    }
+    .system-hint {
+      align-self: center;
+      max-width: 90%;
+      padding: var(--space-2) var(--space-3);
+      font-size: 12px;
+      color: var(--text-soft);
+      text-align: center;
+      background: rgba(255, 255, 255, .10);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .message-row {
+      display: flex;
+      align-items: flex-end;
+      gap: var(--space-2);
+    }
+    .message-row.ai { justify-content: flex-start; }
+    .message-row.human { justify-content: flex-end; }
+    .message-avatar {
+      width: var(--avatar-size);
+      height: var(--avatar-size);
+      border-radius: 50%;
+      background: var(--avatar-default) center/cover no-repeat;
+      border: 1px solid var(--hairline);
+      flex-shrink: 0;
+    }
+
+    /* Bottom composer */
+    .composer-shell {
+      flex-shrink: 0;
+      padding: 10px var(--side-pad) calc(10px + env(safe-area-inset-bottom));
+      background: rgba(5, 13, 20, .55);
+      border-top: 1px solid var(--hairline);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+    .composer {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      width: 100%;
+      min-height: var(--composer-h);
+      padding: 8px 12px 8px 14px;
+      border-radius: 999px;
+      background: var(--composer-bg);
+      border: 1px solid var(--hairline);
+      transition: box-shadow var(--motion-fast);
+    }
+    .composer:focus-within { box-shadow: 0 0 0 2px var(--info-ring); }
+    .composer__attach,
+    .composer__emoji,
+    .composer__send {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background var(--motion-fast), filter var(--motion-fast), transform var(--motion-fast) var(--ease-soft);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .composer__attach,
+    .composer__emoji {
+      width: 36px;
+      height: 36px;
+      color: var(--text-soft);
+      background: transparent;
+    }
+    .composer__attach:hover,
+    .composer__emoji:hover { background: var(--row-press); }
+    .composer__attach:active,
+    .composer__emoji:active { transform: scale(0.92); }
+    .composer__attach svg,
+    .composer__emoji svg { width: 20px; height: 20px; stroke-width: 1.8; }
+    .composer__input {
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--font-family-base);
+      font-size: 15px;
+      line-height: 20px;
+      max-height: 120px;
+      padding: 0 4px;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+    }
+    .composer__input::placeholder { color: var(--text-faint); }
+    .composer__send {
+      width: 36px;
+      height: 36px;
+      color: var(--accent-fg);
+      background: var(--send-bg);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .20);
+    }
+    .composer__send:hover { filter: brightness(1.08); }
+    .composer__send:active { transform: scale(0.92); filter: brightness(0.95); }
+    .composer__send svg { width: 18px; height: 18px; stroke-width: 2; }
+  </style>
+
+  <div class="chat-root">
+    <div class="safe-top"></div>
+
+    <header class="nav-bar">
+      <a href="index.html" class="nav-back" data-dom-id="chat-back" aria-label="返回">
+        <i data-lucide="chevron-left"></i>
+      </a>
+      <div class="nav-title-group">
+        <h1 class="nav-title" data-dom-id="chat-title">阿克</h1>
+        <button class="nav-status" data-dom-id="chat-status" type="button" aria-label="当前状态：在家 · 书房">
+          🏠 在家 · 书房
+        </button>
+      </div>
+      <button class="nav-action" data-dom-id="chat-new-chat" type="button" aria-label="切换聊天">
+        <i data-lucide="layout-grid"></i>
+      </button>
+    </header>
+
+    <main class="messages-scroll no-scrollbar" data-dom-id="chat-messages" role="log" aria-live="polite" aria-label="消息记录">
+      <div class="messages-list">
+        <div class="system-hint">这里只有你和 Claude。说点什么吧。</div>
+
+        <div class="message-row ai">
+          <div class="message-avatar" aria-hidden="true"></div>
+          <div class="message-bubble ai">
+            <p class="text">你好呀，今天过得怎么样？</p>
+          </div>
+        </div>
+
+        <div class="message-row human">
+          <div class="message-bubble human">
+            <p class="text">挺好的，刚下班。</p>
+          </div>
+        </div>
+
+        <div class="message-row ai">
+          <div class="message-avatar" aria-hidden="true"></div>
+          <div class="message-bubble ai">
+            <p class="text">辛苦啦，要不要聊聊今天的事？</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="composer-shell">
+      <form class="composer" data-dom-id="chat-composer" onsubmit="return false;" aria-label="消息输入框">
+        <button class="composer__attach" data-dom-id="chat-attach" type="button" aria-label="添加附件">
+          <i data-lucide="paperclip"></i>
+        </button>
+        <textarea class="composer__input" data-dom-id="chat-input" rows="1" placeholder="Write a letter..." aria-label="输入消息"></textarea>
+        <button class="composer__emoji" type="button" aria-label="表情">
+          <i data-lucide="smile"></i>
+        </button>
+        <button class="composer__send" data-dom-id="chat-send" type="submit" aria-label="发送">
+          <i data-lucide="arrow-up"></i>
+        </button>
+      </form>
+    </div>
+
+    <div class="safe-bottom"></div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    // Simple auto-resize for the textarea
+    const input = document.querySelector('[data-dom-id="chat-input"]');
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    });
+  </script>
+</body>
+</html>

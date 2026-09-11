@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Motra 首页</title>
+    <style id="theme-vars">
+/* @dark-only */
+/* Source: structured-spec */
+/* Project-local bridge: Motra library tokens + Tailwind semantic aliases */
+
+:root {
+  /* ── Reference & viewport ── */
+  --screen-height: 100vh;
+  --keyboard-offset: 0px;
+  --ios-pwa-bottom-bleed: 0px;
+  --ref-width: 941px;
+  --ref-height: 1672px;
+
+  /* ── Typography ── */
+  --font-en: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-cn: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-script: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --fs-scale: 1;
+
+  /* ── Wallpaper / assets ── */
+  --wall-light: url("../assets/beach.jpg");
+  --wall-harbor: url("../assets/beach.jpg");
+  --wall-default: var(--wall-light);
+  --menu-wall-light: url("../assets/beach.jpg");
+  --menu-wall-harbor: url("../assets/beach.jpg");
+  --menu-wall-default: var(--menu-wall-light);
+  --avatar-default: url("../assets/avatar-sea.jpg");
+  --wall: url("../assets/beach.jpg");
+
+  /* ── MOTRA · 星辰之语(深色海岸玻璃拟态) ── */
+  --bg: #050D14;
+  --header-bg: rgba(5, 13, 20, .00);
+  --hairline: rgba(255, 255, 255, .10);
+  --text: #F2F0EE;
+  --text-soft: #B8B8C0;
+  --text-faint: #808088;
+  --accent: #A8CCE0;
+  --accent-deep: #A8CCE0;
+  --accent-fg: #0A1620;
+  --send-bg: #A8CCE0;
+  --tick: #8EB8D0;
+  --danger: #E08A96;
+
+  /* Messages / bubbles */
+  --bubble-ai-bg: rgba(255, 255, 255, .14);
+  --bubble-ai-fg: #F2F0EE;
+  --bubble-ai-line: rgba(255, 255, 255, .08);
+  --bubble-human-bg: rgba(168, 204, 224, .26);
+  --bubble-human-fg: #F2F0EE;
+  --bubble-human-line: transparent;
+
+  /* Thinking / meta cards */
+  --think-flourish: rgba(168, 204, 224, .45);
+  --think-label: #A8CCE0;
+  --think-body: #B8B8C0;
+
+  /* Composer / fields */
+  --composer-bg: rgba(255, 255, 255, .12);
+  --field-bg: rgba(255, 255, 255, .12);
+  --field-line: rgba(255, 255, 255, .12);
+
+  /* Atmosphere */
+  --shadow: 0 18px 46px rgba(0, 0, 0, .28);
+  --shadow-soft: 0 14px 34px rgba(0, 0, 0, .20);
+  --scrim: linear-gradient(180deg, rgba(5, 13, 20, .55) 0%, rgba(5, 13, 20, .28) 30%, rgba(5, 13, 20, .28) 68%, rgba(5, 13, 20, .55) 100%);
+
+  /* ── Spacing ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── Border radius ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-bubble: clamp(14px, 2vw, 20px);
+
+  /* ── Shadows ── */
+  --shadow-1: 0 4px 12px rgba(0, 0, 0, .15);
+  --shadow-2: 0 14px 34px rgba(0, 0, 0, .20);
+  --shadow-3: 0 18px 46px rgba(0, 0, 0, .28);
+
+  /* ── Layout ── */
+  --header-h: clamp(56px, 10vw, 120px);
+  --side-pad: clamp(16px, 4vw, 40px);
+  --avatar-size: clamp(32px, 5vw, 48px);
+  --composer-h: clamp(44px, 6vw, 72px);
+  --composer-zone: calc(var(--composer-h) + 36px + env(safe-area-inset-bottom) + var(--keyboard-offset));
+  --edge-fade-top: clamp(24px, 5vw, 52px);
+  --edge-fade-tail: clamp(16px, 3vw, 30px);
+
+  /* ── Motion ── */
+  --motion-fast: 150ms;
+  --motion-normal: 260ms;
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── Profile / settings ── */
+  --card-bg: rgba(255, 255, 255, .14);
+  --card-line: rgba(255, 255, 255, .12);
+  --card-shadow: 0 10px 28px rgba(0, 0, 0, .25);
+  --seg-track: rgba(255, 255, 255, .10);
+  --seg-thumb: rgba(168, 204, 224, .30);
+  --seg-thumb-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+  --row-press: rgba(255, 255, 255, .08);
+  --slider-track: rgba(255, 255, 255, .16);
+  --slider-thumb: #A8CCE0;
+  --info-ring: rgba(168, 204, 224, .38);
+  --status-dot: #A8D8C0;
+
+  /* ── Sheet / modal shared ── */
+  --sheet-bg: rgba(16, 26, 36, .94);
+  --sheet-line: rgba(255, 255, 255, .14);
+  --sheet-hi: rgba(255, 255, 255, .16);
+  --sheet-scrim: rgba(0, 0, 0, .50);
+
+  /* ── Voice call ── */
+  --call-glass-top: rgba(255, 255, 255, .18);
+  --call-glass-bot: rgba(255, 255, 255, .08);
+  --call-glass-edge: rgba(255, 255, 255, .24);
+  --call-glass-hi: rgba(255, 255, 255, .30);
+  --call-glass-glow: rgba(168, 204, 224, .22);
+  --call-glass-shadow: 0 20px 50px rgba(0, 0, 0, .30);
+  --call-scrim: rgba(5, 13, 20, .55);
+  --call-hangup-bg: #E0A8A8;
+  --call-hangup-shadow: rgba(224, 168, 168, .30);
+
+  /* ── 猫咪专用 ── */
+  --fur-a: #F0C891;
+  --fur-b: #C98D54;
+  --warm: #EFBE8F;
+
+  /* ── 冰箱门 / 便利贴专用 ── */
+  --door-a: rgba(255, 255, 255, .14);
+  --door-b: rgba(255, 255, 255, .05);
+  --door-line: rgba(255, 255, 255, .12);
+  --note: #FFF6D8;
+  --note-line: #EADFA9;
+  --note-fold: #F0E4B4;
+  --note-ink: #5A4A26;
+  --note-muted: #9A8B5C;
+
+  /* ── 记忆仓库专用 ── */
+  --vault-a: rgba(255, 255, 255, .14);
+  --vault-b: rgba(255, 255, 255, .05);
+  --vault-line: rgba(255, 255, 255, .12);
+
+  /* ── 经期卡专用(玫瑰) ── */
+  --rose-a: #F2C6D4;
+  --rose-b: #B05A78;
+
+  /* ── Tailwind / semantic aliases (prefixless) ── */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--card-bg);
+  --card-foreground: var(--text);
+  --popover: var(--sheet-bg);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-fg);
+  --secondary: var(--card-bg);
+  --secondary-foreground: var(--text);
+  --muted: var(--text-soft);
+  --muted-foreground: var(--text-faint);
+  --accent: var(--accent);
+  --accent-foreground: var(--accent-fg);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--text);
+  --border: var(--hairline);
+  --input: var(--field-bg);
+  --ring: var(--accent);
+
+  /* ── Layer 3 portable aliases ── */
+  --color-bg: var(--bg);
+  --color-header-bg: var(--header-bg);
+  --color-surface: var(--card-bg);
+  --color-surface-container: var(--sheet-bg);
+  --color-text: var(--text);
+  --color-on-surface: var(--text);
+  --color-text-soft: var(--text-soft);
+  --color-on-surface-variant: var(--text-soft);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-primary: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-primary-hover: var(--accent-deep);
+  --color-accent-fg: var(--accent-fg);
+  --color-primary-foreground: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-hairline: var(--hairline);
+  --color-border: var(--hairline);
+  --color-field-bg: var(--field-bg);
+  --color-field-line: var(--field-line);
+  --color-card-bg: var(--card-bg);
+  --color-card-line: var(--card-line);
+  --color-card-shadow: var(--card-shadow);
+  --color-sheet-bg: var(--sheet-bg);
+  --color-sheet-line: var(--sheet-line);
+  --color-sheet-hi: var(--sheet-hi);
+  --color-sheet-scrim: var(--sheet-scrim);
+  --color-bubble-ai-bg: var(--bubble-ai-bg);
+  --color-bubble-ai-fg: var(--bubble-ai-fg);
+  --color-bubble-ai-line: var(--bubble-ai-line);
+  --color-bubble-human-bg: var(--bubble-human-bg);
+  --color-bubble-human-fg: var(--bubble-human-fg);
+  --color-bubble-human-line: var(--bubble-human-line);
+  --color-composer-bg: var(--composer-bg);
+  --color-send-bg: var(--send-bg);
+  --color-tick: var(--tick);
+  --color-think-label: var(--think-label);
+  --color-think-body: var(--think-body);
+  --color-status-dot: var(--status-dot);
+  --color-call-hangup-bg: var(--call-hangup-bg);
+  --font-family-base: var(--font-cn);
+  --font-family-display: var(--font-en);
+  --font-family-script: var(--font-script);
+  --type-scale: var(--fs-scale);
+  --bubble-radius: clamp(14px, 2vw, 20px);
+  --radius-bubble: var(--bubble-radius);
+  --shadow-default: var(--shadow);
+  --motion-fast: var(--motion-fast);
+  --motion-normal: var(--motion-normal);
+  --ease-soft: var(--ease-soft);
+  --layout-header-h: var(--header-h);
+  --layout-side-pad: var(--side-pad);
+  --layout-avatar-size: var(--avatar-size);
+  --layout-composer-h: var(--composer-h);
+}
+
+@media (max-width: 520px) {
+  :root {
+    --side-pad: 16px;
+    --header-h: 68px;
+    --avatar-size: 32px;
+    --edge-fade-top: 10px;
+  }
+}
+
+.page-period {
+  --warm: #E8A9BC;
+}
+
+    </style>
+    <style id="component-vars">
+/* ═══════════════════════════════════════════════════════════════
+   components.css — Design System Component Definitions
+   Auto-extracted from preview/component-*.html
+   DO NOT EDIT MANUALLY — regenerate via extract-components-css.mjs
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Avatar ────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="avatar sm circle" data-evidence-sample="sm">
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.avatar { position: relative; display: inline-flex; flex-shrink: 0; width: var(--layout-avatar-size); height: var(--layout-avatar-size); background-color: var(--color-surface); background-image: var(--avatar-default); background-size: cover; background-position: center; overflow: hidden; }
+.avatar.circle { border-radius: 50%; }
+.avatar.rounded { border-radius: var(--radius-md); }
+.avatar.bordered { border: 1px solid var(--color-hairline); box-sizing: border-box; }
+.avatar.sm { width: 24px; height: 24px; }
+.avatar.md { width: var(--layout-avatar-size); height: var(--layout-avatar-size); }
+.avatar.lg { width: 64px; height: 64px; }
+.avatar.xl { width: 120px; height: 120px; }
+.avatar-status { position: absolute; right: 0; bottom: 0; width: 28%; height: 28%; min-width: 6px; min-height: 6px; background: var(--color-status-dot); border-radius: 50%; border: 2px solid var(--color-bg); box-sizing: border-box; }
+.avatar-hero { display: inline-flex; padding: 3px; border-radius: 50%; background: conic-gradient(from 180deg, var(--color-accent), var(--color-status-dot), var(--color-accent)); box-shadow: var(--shadow-3); }
+.avatar-hero .avatar { display: block; }
+
+/* ── Button ────────────────────────────────────────────────── */
+/* @anatomy
+   <button class="btn primary sm">保存</button> <button class="btn primary md" data-evidence-sample="primary-pill-md">进入聊天</button> <button class="btn primary lg" disabled>确认</button>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: none; cursor: pointer; font-family: var(--font-family-base); font-weight: 500; border-radius: 999px; padding: 0 20px; min-width: 44px; height: 44px; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s, border-color .15s, filter .15s; }
+.btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.btn.primary { background: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary:active { filter: brightness(0.95); }
+.btn.secondary { background: transparent; border: 1px solid var(--color-hairline); color: var(--color-text); }
+.btn.secondary:hover { background: var(--row-press); }
+.btn.secondary:active { filter: brightness(0.95); }
+.btn.ghost { background: transparent; color: var(--color-text-soft); }
+.btn.ghost:hover { background: var(--row-press); }
+.btn.ghost:active { filter: brightness(0.95); }
+.btn.circle { border-radius: 50%; padding: 0; width: 44px; min-width: 44px; }
+.btn.sm { height: 32px; min-width: 32px; padding: 0 12px; font-size: 13px; }
+.btn.sm.circle { width: 32px; min-width: 32px; }
+.btn.md { height: 44px; min-width: 44px; padding: 0 20px; font-size: 15px; }
+.btn.md.circle { width: 44px; min-width: 44px; }
+.btn.lg { height: 56px; min-width: 56px; padding: 0 28px; font-size: 17px; }
+.btn.lg.circle { width: 56px; min-width: 56px; }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .4; cursor: not-allowed; pointer-events: none; }
+
+/* ── Card ──────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="card" data-evidence-sample="frosted-default"> <div class="card-body"><p>今晚的海风有点凉，要聊聊你今天过得怎么样吗？</p>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.card { width: 100%; background: var(--color-card-bg); border: 1px solid var(--color-card-line); border-radius: var(--radius-bubble); box-shadow: var(--color-card-shadow); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); overflow: hidden; }
+.card-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4); border-bottom: 1px solid var(--color-card-line); }
+.card-title { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0; }
+.card-body { padding: var(--space-4); color: var(--color-text-soft); line-height: 1.5; }
+.card-body p { margin: 0; }
+.card-footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-card-line); flex-shrink: 0; }
+.card-action { font-size: 13px; color: var(--color-accent); }
+.card-compact { border-radius: var(--radius-md); }
+.card-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.card-row + .card-row { border-top: 1px solid var(--color-card-line); }
+.card-icon { flex-shrink: 0; width: 20px; height: 20px; color: var(--color-accent); }
+.card-label { flex: 1 1 auto; min-width: 0; font-size: 14px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-value { flex-shrink: 0; font-size: 14px; color: var(--color-text-soft); }
+.card-chevron { flex-shrink: 0; width: 16px; height: 16px; color: var(--color-text-faint); }
+
+/* ── Composer ──────────────────────────────────────────────── */
+/* @anatomy
+   <div class="composer" role="textbox" aria-label="消息输入"> <textarea class="composer__input" rows="1" placeholder="想对 Motra 说点什么..."></textarea> <button class="composer__send" type="button" aria-label="发送"><!-- send icon --></button>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.composer { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--layout-composer-h); padding: 10px 14px; border-radius: 999px; background: var(--color-composer-bg); }
+.composer:focus-within, .composer.composer--focused { outline: 2px solid currentColor; outline-offset: 2px; }
+.composer__input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--color-text); font-family: var(--font-family-base); font-size: calc(15px * var(--type-scale)); line-height: 20px; height: 20px; padding: 0; resize: none; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer__input::placeholder { color: var(--color-text-faint); }
+.composer__send { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--color-send-bg); color: var(--color-accent-fg); cursor: pointer; transition: background .15s, filter .15s; }
+.composer__send:hover { filter: brightness(1.08); }
+.composer__send:active { filter: brightness(0.95); }
+.composer__send:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.composer__send img { display: block; width: 18px; height: 18px; }
+.composer__tool { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; height: 28px; min-width: 28px; padding: 0 var(--space-2); border: 1px solid var(--color-hairline); border-radius: 999px; background: transparent; color: var(--color-text-soft); font-family: var(--font-family-base); font-size: 12px; cursor: pointer; transition: background .15s, border-color .15s; white-space: nowrap; }
+.composer__tool:hover { background: var(--row-press); border-color: var(--color-text-soft); }
+.composer__tool:active { filter: brightness(0.95); }
+.composer__tool:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.composer__thumb { flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--color-field-bg); border: 1px solid var(--color-field-line); }
+.field { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-card-bg); border: 1px solid var(--color-card-line); }
+.field__label { font-size: 12px; color: var(--color-text-soft); }
+.field__input { width: 100%; min-width: 0; height: 36px; background: transparent; border: none; border-bottom: 1px solid var(--color-field-line); color: var(--color-text); font-family: var(--font-family-base); font-size: 14px; outline: none; transition: border-color .15s; }
+.field__input:hover { border-color: var(--color-text-soft); }
+.field__input:focus, .field__input--focus { border-color: var(--color-accent); }
+
+/* ── Message Bubble ────────────────────────────────────────── */
+/* @anatomy
+   <div class="message-bubble ai" data-evidence-sample="ai-default"> <p class="text">今晚的月光落在海面上，像一层薄薄的糖霜。你想聊聊今天发生了什么吗？</p> <div class="meta"><span>21:34</span>
+*/
+/* Component definitions — extracted to components.css by deterministic script */
+.message-bubble { position: relative; max-width: 80%; padding: var(--space-3) var(--space-4); border-radius: var(--radius-bubble); line-height: 1.5; overflow-wrap: break-word; }
+.message-bubble.ai { align-self: flex-start; background: var(--color-bubble-ai-bg); color: var(--color-bubble-ai-fg); border: 1px solid var(--color-bubble-ai-line); }
+.message-bubble.human { align-self: flex-end; max-width: 78%; background: var(--color-bubble-human-bg); color: var(--color-bubble-human-fg); border: 1px solid var(--color-bubble-human-line); }
+.message-bubble .text { margin: 0; }
+.message-bubble .meta { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); font-size: 11px; color: var(--color-text-faint); }
+.message-bubble .meta .tick { width: 14px; height: 14px; flex-shrink: 0; }
+.message-bubble.think { max-width: 100%; background: transparent; border: 1px solid var(--color-hairline); }
+.message-bubble.think .think-label { display: flex; align-items: center; gap: var(--space-2); color: var(--color-think-label); font-size: 13px; margin-bottom: var(--space-2); }
+.message-bubble.think .think-body { color: var(--color-think-body); font-size: 13px; line-height: 1.6; }
+
+/* ── Sheet ─────────────────────────────────────────────────── */
+/* @anatomy
+   <div class="viewport" data-evidence-sample="bottom"> <div class="sh-scrim">
+*/
+.sh-scrim { position: absolute; inset: 0; background: var(--color-sheet-scrim); }
+.sheet { position: absolute; background: var(--color-sheet-bg); border: 1px solid var(--color-sheet-line); display: flex; flex-direction: column; overflow: hidden; }
+.sheet.bottom { bottom: 0; left: 0; right: 0; max-height: 80%; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+.sheet.center { top: 50%; left: 50%; width: calc(100% - var(--space-6)); max-width: 260px; transform: translate(-50%, -50%); border-radius: var(--radius-xl); }
+.sh-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--color-sheet-hi); margin: var(--space-2) auto; }
+.sh-hd { padding: var(--space-2) var(--space-4) var(--space-3); font-size: 15px; font-weight: 500; flex-shrink: 0; }
+.sh-bd { padding: 0 var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.sh-item { display: flex; align-items: center; height: 28px; padding: 0 var(--space-2); border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; transition: background .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-item:hover, .sh-act.ghost:hover { background: var(--row-press); }
+.sh-txt { padding: 0 var(--space-2); font-size: 14px; line-height: 1.5; color: var(--color-text-soft); }
+.sh-ft { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-sheet-line); flex-shrink: 0; }
+.sh-act { flex: 1; display: inline-flex; align-items: center; justify-content: center; height: 36px; border-radius: var(--radius-md); border: none; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: .15s; }
+.sh-act.ghost { background: transparent; color: var(--color-text); }
+.sh-act.primary { background: var(--color-accent); color: var(--color-accent-fg); }
+.sh-act.primary:hover { filter: brightness(1.08); }
+.call { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); background: var(--scrim); }
+.orb { width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, var(--call-glass-top), var(--call-glass-bot)); box-shadow: 0 0 0 1px var(--call-glass-edge), 0 0 28px var(--call-glass-glow), var(--call-glass-shadow); }
+.status { font-size: 14px; color: var(--color-text-soft); }
+.hangup { width: 52px; height: 52px; border-radius: 50%; border: none; display: inline-flex; align-items: center; justify-content: center; background: var(--color-danger); cursor: pointer; transition: filter .15s; flex-shrink: 0; }
+.hangup:hover { filter: brightness(0.92); }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --radius-sm: var(--radius-sm);
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
+    --radius-xl: var(--radius-xl);
+  }
+  @layer base {
+    body { background: var(--background); color: var(--foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--background); }
+      .text-background { color: var(--background); }
+      .border-background { border-color: var(--background); }
+      .ring-background { --tw-ring-color: var(--background); }
+      .bg-foreground { background-color: var(--foreground); }
+      .text-foreground { color: var(--foreground); }
+      .border-foreground { border-color: var(--foreground); }
+      .ring-foreground { --tw-ring-color: var(--foreground); }
+      .bg-card { background-color: var(--card); }
+      .text-card { color: var(--card); }
+      .border-card { border-color: var(--card); }
+      .ring-card { --tw-ring-color: var(--card); }
+      .bg-card-foreground { background-color: var(--card-foreground); }
+      .text-card-foreground { color: var(--card-foreground); }
+      .border-card-foreground { border-color: var(--card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--card-foreground); }
+      .bg-popover { background-color: var(--popover); }
+      .text-popover { color: var(--popover); }
+      .border-popover { border-color: var(--popover); }
+      .ring-popover { --tw-ring-color: var(--popover); }
+      .bg-popover-foreground { background-color: var(--popover-foreground); }
+      .text-popover-foreground { color: var(--popover-foreground); }
+      .border-popover-foreground { border-color: var(--popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--popover-foreground); }
+      .bg-primary { background-color: var(--primary); }
+      .text-primary { color: var(--primary); }
+      .border-primary { border-color: var(--primary); }
+      .ring-primary { --tw-ring-color: var(--primary); }
+      .bg-primary-foreground { background-color: var(--primary-foreground); }
+      .text-primary-foreground { color: var(--primary-foreground); }
+      .border-primary-foreground { border-color: var(--primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--primary-foreground); }
+      .bg-secondary { background-color: var(--secondary); }
+      .text-secondary { color: var(--secondary); }
+      .border-secondary { border-color: var(--secondary); }
+      .ring-secondary { --tw-ring-color: var(--secondary); }
+      .bg-secondary-foreground { background-color: var(--secondary-foreground); }
+      .text-secondary-foreground { color: var(--secondary-foreground); }
+      .border-secondary-foreground { border-color: var(--secondary-foreground); }
+      .ring-secondary-foreground { --tw-ring-color: var(--secondary-foreground); }
+      .bg-muted { background-color: var(--muted); }
+      .text-muted { color: var(--muted); }
+      .border-muted { border-color: var(--muted); }
+      .ring-muted { --tw-ring-color: var(--muted); }
+      .bg-muted-foreground { background-color: var(--muted-foreground); }
+      .text-muted-foreground { color: var(--muted-foreground); }
+      .border-muted-foreground { border-color: var(--muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--muted-foreground); }
+      .bg-accent { background-color: var(--accent); }
+      .text-accent { color: var(--accent); }
+      .border-accent { border-color: var(--accent); }
+      .ring-accent { --tw-ring-color: var(--accent); }
+      .bg-accent-foreground { background-color: var(--accent-foreground); }
+      .text-accent-foreground { color: var(--accent-foreground); }
+      .border-accent-foreground { border-color: var(--accent-foreground); }
+      .ring-accent-foreground { --tw-ring-color: var(--accent-foreground); }
+      .bg-destructive { background-color: var(--destructive); }
+      .text-destructive { color: var(--destructive); }
+      .border-destructive { border-color: var(--destructive); }
+      .ring-destructive { --tw-ring-color: var(--destructive); }
+      .bg-destructive-foreground { background-color: var(--destructive-foreground); }
+      .text-destructive-foreground { color: var(--destructive-foreground); }
+      .border-destructive-foreground { border-color: var(--destructive-foreground); }
+      .ring-destructive-foreground { --tw-ring-color: var(--destructive-foreground); }
+      .bg-border { background-color: var(--border); }
+      .text-border { color: var(--border); }
+      .border-border { border-color: var(--border); }
+      .ring-border { --tw-ring-color: var(--border); }
+      .bg-input { background-color: var(--input); }
+      .text-input { color: var(--input); }
+      .border-input { border-color: var(--input); }
+      .ring-input { --tw-ring-color: var(--input); }
+      .bg-ring { background-color: var(--ring); }
+      .text-ring { color: var(--ring); }
+      .border-ring { border-color: var(--ring); }
+      .ring-ring { --tw-ring-color: var(--ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body>
+  <style>
+    /* Page-scoped critical layout: static, no JS-driven reflow */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: var(--font-family-base);
+      background: var(--bg) url('../assets/beach.jpg') center/cover no-repeat;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: var(--scrim);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .phone-frame {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .safe-top {
+      height: env(safe-area-inset-top);
+      min-height: 12px;
+      flex-shrink: 0;
+    }
+    .safe-bottom {
+      height: env(safe-area-inset-bottom);
+      min-height: 8px;
+      flex-shrink: 0;
+    }
+    .home-screen {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 28px 24px 10px;
+    }
+
+    /* iOS-style 4-column grid: widgets align to icon grid */
+    .home-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(5, auto);
+      grid-template-areas:
+        "photo photo photo photo"
+        "anni  anni  app1  app2"
+        "anni  anni  app3  app4"
+        "app5  app6  board board"
+        "app7  app8  board board";
+      gap: 32px 18px;
+      flex: 1;
+      align-content: start;
+      width: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+    }
+    .home-grid > * { min-width: 0; min-height: 0; }
+
+    /* Widget shared */
+    .widget {
+      position: relative;
+      border-radius: 22px;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-card-line);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      box-shadow: var(--color-card-shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Photo widget (full-width top) */
+    .widget-photo { grid-area: photo; aspect-ratio: 1.8 / 1; }
+    .widget-photo__bg {
+      position: absolute;
+      inset: 0;
+      background: url('../assets/beach.jpg') center/cover no-repeat;
+    }
+    .widget-photo__scrim {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(5,13,20,0.18) 0%, rgba(5,13,20,0.42) 100%);
+    }
+    .widget-photo__label {
+      position: absolute;
+      left: 14px;
+      bottom: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    }
+
+    /* Anniversary widget (left 2x2) */
+    .widget-anniversary { grid-area: anni; align-items: center; justify-content: center; text-align: center; padding: 12px; aspect-ratio: 1 / 1; }
+    .widget-anniversary__label {
+      font-size: 11px;
+      color: var(--text-soft);
+      margin-bottom: var(--space-1);
+      letter-spacing: 0.02em;
+    }
+    .widget-anniversary__num {
+      font-size: 46px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--color-accent);
+      font-family: var(--font-family-display);
+    }
+    .widget-anniversary__unit {
+      font-size: 12px;
+      color: var(--text-soft);
+      margin-top: 2px;
+    }
+    .widget-anniversary__date {
+      font-size: 10px;
+      color: var(--text-faint);
+      margin-top: var(--space-1);
+    }
+
+    /* Writing board widget (right 2x2 bottom) */
+    .widget-board { grid-area: board; padding: 14px; aspect-ratio: 1 / 1; background: var(--color-card-bg) repeating-linear-gradient(180deg, transparent 0, transparent 22px, rgba(255,255,255,0.08) 22px, rgba(255,255,255,0.08) 23px); }
+    .widget-board__placeholder {
+      font-size: 13px;
+      line-height: 23px;
+      color: var(--text-faint);
+      font-style: italic;
+    }
+
+    /* App tiles */
+    .app-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      align-self: start;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform var(--motion-fast) var(--ease-soft);
+    }
+    .app-tile:active { transform: scale(0.93); }
+    .app-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 16px;
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-card-line);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: var(--color-card-shadow);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      transition: background var(--motion-fast), transform var(--motion-fast) var(--ease-soft);
+    }
+    .app-icon:hover { background: rgba(255,255,255,0.20); }
+    .app-icon svg {
+      width: 26px;
+      height: 26px;
+      stroke-width: 1.7;
+    }
+    .app-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    }
+
+    /* Settings sheet preserved */
+    .sheet-portal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      flex-direction: column;
+    }
+    .sheet-portal.open { display: flex; }
+  </style>
+
+  <div class="phone-frame" data-viewport-mode="document-scroll">
+    <div class="safe-top"></div>
+
+    <div class="home-screen">
+      <div class="home-grid">
+        <div class="widget widget-photo" data-dom-id="widget-photo" aria-label="照片">
+          <div class="widget-photo__bg"></div>
+          <div class="widget-photo__scrim"></div>
+          <span class="widget-photo__label">照片</span>
+        </div>
+
+        <div class="widget widget-anniversary" data-dom-id="widget-anniversary" aria-label="纪念日">
+          <div class="widget-anniversary__label">第一次聊天</div>
+          <div class="widget-anniversary__num">127</div>
+          <div class="widget-anniversary__unit">天</div>
+          <div class="widget-anniversary__date">2026/05/07</div>
+        </div>
+
+        <a class="app-tile" data-dom-id="app-chat" role="button" aria-label="聊天" style="grid-area: app1; text-decoration: none;" href="chat.html">
+          <div class="app-icon"><i data-lucide="message-circle"></i></div>
+          <span class="app-label">聊天</span>
+        </a>
+        <div class="app-tile" data-dom-id="app-room" role="button" aria-label="房间" style="grid-area: app2;">
+          <div class="app-icon"><i data-lucide="home"></i></div>
+          <span class="app-label">房间</span>
+        </div>
+        <div class="app-tile" data-dom-id="app-period" role="button" aria-label="经期" style="grid-area: app3;">
+          <div class="app-icon"><i data-lucide="heart"></i></div>
+          <span class="app-label">经期</span>
+        </div>
+        <div class="app-tile" data-dom-id="app-cat" role="button" aria-label="猫咪" style="grid-area: app4;">
+          <div class="app-icon"><i data-lucide="cat"></i></div>
+          <span class="app-label">猫咪</span>
+        </div>
+
+        <div class="app-tile" data-dom-id="app-fridge" role="button" aria-label="冰箱" style="grid-area: app5;">
+          <div class="app-icon"><i data-lucide="archive"></i></div>
+          <span class="app-label">冰箱</span>
+        </div>
+        <div class="app-tile" data-dom-id="app-memory" role="button" aria-label="记忆" style="grid-area: app6;">
+          <div class="app-icon"><i data-lucide="image"></i></div>
+          <span class="app-label">记忆</span>
+        </div>
+        <div class="app-tile" data-dom-id="app-tide" role="button" aria-label="潮汐" style="grid-area: app7;">
+          <div class="app-icon"><i data-lucide="waves"></i></div>
+          <span class="app-label">潮汐</span>
+        </div>
+        <a class="app-tile" data-dom-id="app-settings" role="button" aria-label="设置" style="grid-area: app8; text-decoration: none;" href="settings.html">
+          <div class="app-icon"><i data-lucide="settings"></i></div>
+          <span class="app-label">设置</span>
+        </a>
+
+        <div class="widget widget-board" data-dom-id="widget-board" aria-label="写字板">
+          <div class="widget-board__placeholder">写点什么…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="safe-bottom"></div>
+  </div>
+
+  <script>lucide.createIcons();</script>
+</body>
+</html>
