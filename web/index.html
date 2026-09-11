@@ -8574,6 +8574,13 @@ $("#loginForm").addEventListener("submit", async (e) => {
   btn.disabled = true; btn.textContent = "连接中…";
   secret = val;
   try{
+    if (USE_MOCK){
+      // mock 模式直接放行，不验证后端
+      localStorage.setItem(LS_KEY, secret);
+      document.documentElement.classList.add("authed");
+      startChat(Mock.history({ latest:true, limit:1000000 }));
+      return;
+    }
     // 用 history 验证密钥(401 会抛错)
     await loadSessions();
     loadBrain();
@@ -8635,6 +8642,9 @@ function startChat(initialMsgs, { connect = true, fromCache = false } = {}){
   if (!fromCache) scheduleCacheSave();
   if (connect) startRealtime();
   refreshContextStatus();
+
+  /* 默认进主菜单（iOS 主屏风格首页），而非直接进聊天页 */
+  if (typeof openMenu === "function") openMenu();
 }
 
 async function init(){
