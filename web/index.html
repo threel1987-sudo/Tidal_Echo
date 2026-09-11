@@ -4,7 +4,7 @@
 <!-- ════════════════════════════════════════════════════════════════
   区块目录（要修改某功能时按区块名搜索即可定位）：
   CSS 样式区：/* ── XXX ── */ 横幅
-    主题变量 TIDAL ECHO · 潮汐回响(深色海岸玻璃拟态) · Header · Messages
+    主题变量 MOTRA · 星辰之语(深色海岸玻璃拟态) · Header · Messages
     meta card(思考/工具卡) · thinking · act · Composer · Login
     Profile 设置页 · API 列表 · Menu 主页 · Voice call · 长按菜单
     多选消息 · 编辑消息 · reaction
@@ -31,7 +31,7 @@
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<title>Tidal Echo</title>
+<title>Motra</title>
 
 <!-- PWA / iOS -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -46,7 +46,7 @@
 <meta name="theme-color" content="#050D14">
 <!-- iOS launch mode is manifest-only; legacy Apple fullscreen meta breaks bottom viewport. -->
 
-<meta name="apple-mobile-web-app-title" content="Tidal Echo">
+<meta name="apple-mobile-web-app-title" content="Motra">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 
@@ -113,7 +113,7 @@
     --menu-wall-harbor: url("beach.webp");
     --menu-wall-default: var(--menu-wall-light);
     --avatar-default: url("avatar-sea.png");
-    /* ── TIDAL ECHO · 潮汐回响(深色海岸玻璃拟态) ── */
+    /* ── MOTRA · 星辰之语(深色海岸玻璃拟态) ── */
     --bg: #050D14;
     --header-bg: rgba(5,13,20,.00);
     --hairline: rgba(255,255,255,.10);
@@ -1808,6 +1808,130 @@
     text-transform:uppercase; color: var(--text-faint);
   }
 
+  /* ── iOS 主屏式网格布局 ── */
+  .home-grid{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto auto auto auto auto;
+    grid-template-areas:
+      "photo photo photo photo"
+      "anni  anni  app1  app2"
+      "anni  anni  app3  app4"
+      "app5  app6  board board"
+      "app7  app8  board board";
+    gap: clamp(14px, 3.5vw, 20px) clamp(10px, 2.5vw, 16px);
+    flex: 1;
+    align-content: start;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+  }
+  .home-grid > * { min-width: 0; min-height: 0; }
+
+  /* Widget 通用 */
+  .widget{
+    position: relative;
+    border-radius: 22px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-line);
+    -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 照片 widget（全宽顶部） */
+  .widget-photo{ grid-area: photo; aspect-ratio: 1.8 / 1; }
+  .widget-photo__bg{
+    position: absolute; inset: 0;
+    background: var(--menu-wall-default) center/cover no-repeat;
+  }
+  .widget-photo__scrim{
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(5,13,20,0.18) 0%, rgba(5,13,20,0.42) 100%);
+  }
+  .widget-photo__label{
+    position: absolute; left: 14px; bottom: 12px;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  }
+
+  /* 纪念日 widget（左侧 2x2） */
+  .widget-anniversary{
+    grid-area: anni;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 12px; aspect-ratio: 1 / 1;
+  }
+  .widget-anniversary__label{
+    font-size: 11px; color: var(--text-soft);
+    margin-bottom: 4px; letter-spacing: 0.02em;
+  }
+  .widget-anniversary__num{
+    font-size: clamp(36px, 10vw, 48px); font-weight: 700; line-height: 1;
+    color: var(--accent); font-family: var(--font-en), var(--font-cn);
+  }
+  .widget-anniversary__unit{
+    font-size: 12px; color: var(--text-soft); margin-top: 2px;
+  }
+  .widget-anniversary__date{
+    font-size: 10px; color: var(--text-faint); margin-top: 4px;
+  }
+
+  /* 写字板 widget（右下 2x2） */
+  .widget-board{
+    grid-area: board;
+    padding: 14px; aspect-ratio: 1 / 1;
+    background: var(--card-bg) repeating-linear-gradient(180deg, transparent 0, transparent 22px, rgba(255,255,255,0.08) 22px, rgba(255,255,255,0.08) 23px);
+  }
+  .widget-board__placeholder{
+    font-size: 13px; line-height: 23px; color: var(--text-faint);
+    font-style: italic;
+  }
+
+  /* 应用图标 */
+  .app-tile{
+    display: flex; flex-direction: column; align-items: center;
+    gap: 5px; cursor: pointer; align-self: start;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform var(--motion-fast) var(--ease-soft);
+    border: none; background: transparent; padding: 0;
+    font: inherit; color: inherit;
+  }
+  .app-tile:active{ transform: scale(0.93); }
+  .app-tile[data-menu="chat"]   { grid-area: app1; }
+  .app-tile[data-menu="room"]   { grid-area: app2; }
+  .app-tile[data-menu="period"] { grid-area: app3; }
+  .app-tile[data-menu="cat"]    { grid-area: app4; }
+  .app-tile[data-menu="fridge"] { grid-area: app5; }
+  .app-tile[data-menu="memory"] { grid-area: app6; }
+  .app-tile[data-menu="tides"]  { grid-area: app7; }
+  .app-tile[data-menu="settings"]{ grid-area: app8; }
+  .app-icon{
+    width: clamp(52px, 14vw, 64px); height: clamp(52px, 14vw, 64px);
+    border-radius: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-line);
+    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    box-shadow: var(--card-shadow);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text);
+    transition: background var(--motion-fast), transform var(--motion-fast) var(--ease-soft);
+  }
+  .app-icon:hover{ background: rgba(255,255,255,0.20); }
+  .app-icon svg{
+    width: clamp(22px, 6vw, 28px); height: clamp(22px, 6vw, 28px);
+    stroke-width: 1.7;
+  }
+  .app-label{
+    font-size: 12px; font-weight: 500; color: var(--text);
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  }
+
+  /* 隐藏旧菜单元素 */
+  .menu-head, .menu-hero, .menu-list{ display: none !important; }
+
   /* footer */
   .menu-foot{
     flex: 1 1 auto;
@@ -2455,7 +2579,7 @@
 <div class="login" id="login">
   <div class="login-card">
     <div class="orb"></div>
-    <h1>Tidal Echo</h1>
+    <h1>Motra</h1>
     <p class="sub">输入连接密钥,进入你和Claude的频道。</p>
     <form id="loginForm" autocomplete="off">
       <label class="login-label" for="secretInput">连接密钥</label>
@@ -2989,59 +3113,62 @@
 <div class="menu-panel hidden" id="menuPanel" role="dialog" aria-modal="true" aria-label="主菜单">
   <div class="menu-page">
     <div class="menu-scroll">
-      <!-- header -->
-      <div class="menu-head">
+      <!-- iOS 主屏式网格布局 -->
+      <div class="home-grid">
+        <!-- 照片 widget（全宽顶部） -->
+        <div class="widget widget-photo">
+          <div class="widget-photo__bg"></div>
+          <div class="widget-photo__scrim"></div>
+          <span class="widget-photo__label">照片</span>
+        </div>
 
-        <div class="menu-private">PRIVATE<br>SPACE</div>
+        <!-- 纪念日 widget（左侧 2x2） -->
+        <div class="widget widget-anniversary">
+          <div class="widget-anniversary__label">第一次聊天</div>
+          <div class="widget-anniversary__num" id="menuDays">127</div>
+          <div class="widget-anniversary__unit">天</div>
+          <div class="widget-anniversary__date" id="menuSince">2026/01/01</div>
+        </div>
+
+        <!-- 写字板 widget（右下 2x2） -->
+        <div class="widget widget-board">
+          <div class="widget-board__placeholder">写点什么…</div>
+        </div>
+
+        <!-- 应用图标网格 -->
+        <button class="app-tile" type="button" data-menu="chat">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></div>
+          <span class="app-label">聊天</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="room">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V9a7 7 0 0 1 14 0v12"/><path d="M4 21h16"/><circle cx="15" cy="13" r="1"/></svg></div>
+          <span class="app-label">房间</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="period">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c2.8 3.6 6 7 6 10.3a6 6 0 1 1-12 0c0-3.3 3.2-6.7 6-10.3Z"/><path d="M9.2 14.2a2.9 2.9 0 0 0 2 2.6"/></svg></div>
+          <span class="app-label">经期</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="cat">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 9.2 4.6 4.2l3.9 2.4a8.6 8.6 0 0 1 7 0l3.9-2.4-.9 5A7.6 7.6 0 1 1 5.5 9.2Z"/><circle cx="9.4" cy="13" r=".75" fill="currentColor" stroke="none"/><circle cx="14.6" cy="13" r=".75" fill="currentColor" stroke="none"/><path d="M11 16.2c.6.5 1.4.5 2 0"/></svg></div>
+          <span class="app-label">猫咪</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="fridge">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="3" width="15.6" height="18" rx="2"/><path d="M8.8 3v1.2M15.2 3v1.2M8.8 21v-1.2M15.2 21v-1.2"/><path d="M12 7.5v6M12 13.5l-1.1-1.2M12 13.5l1.1-1.2"/></svg></div>
+          <span class="app-label">冰箱</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="memory">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c.8 5 3.5 7.7 8.5 8.5-5 .8-7.7 3.5-8.5 8.5-.8-5-3.5-7.7-8.5-8.5 5-.8 7.7-3.5 8.5-8.5Z"/></svg></div>
+          <span class="app-label">记忆</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="tides">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/><path d="M3 13c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/><path d="M3 17.5c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/></svg></div>
+          <span class="app-label">潮汐</span>
+        </button>
+        <button class="app-tile" type="button" data-menu="settings">
+          <div class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+          <span class="app-label">设置</span>
+        </button>
       </div>
-
-      <!-- hero -->
-      <div class="menu-hero">
-        <h1 class="menu-title">Tidal Echo</h1>
-        <p class="menu-tagline">潮汐回响</p>
-        <div class="menu-brand-divider"><span class="menu-brand-dot"></span></div>
-        <p class="menu-since">since 2026/01/01</p>
-        <div class="menu-days"><span class="num" id="menuDays">113</span><span class="lab">Days together</span></div>
-      </div>
-
-      <!-- grid -->
-      <nav class="menu-list" aria-label="主菜单">
-        <button class="menu-item" type="button" data-menu="chat">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gChat)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gChat" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#8FD4F0"/><stop offset="1" stop-color="#2E7CA8"/></linearGradient></defs><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z"/></svg></span>
-          <span class="menu-name">聊天</span>
-          <span class="menu-sub">Chat</span>
-        </button>
-        <button class="menu-item" type="button" data-menu="period">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gPeriod)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gPeriod" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#F2C6D4"/><stop offset="1" stop-color="#B05A78"/></linearGradient></defs><path d="M12 3.5c2.8 3.6 6 7 6 10.3a6 6 0 1 1-12 0c0-3.3 3.2-6.7 6-10.3Z"/><path d="M9.2 14.2a2.9 2.9 0 0 0 2 2.6"/></svg></span>
-          <span class="menu-name">经期</span>
-          <span class="menu-sub">Cycle</span>
-        </button>
-        <button class="menu-item" type="button" data-menu="fridge">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gFridge)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gFridge" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#9FE4C8"/><stop offset="1" stop-color="#3B9A78"/></linearGradient></defs><rect x="4.2" y="3" width="15.6" height="18" rx="2"/><path d="M8.8 3v1.2M15.2 3v1.2M8.8 21v-1.2M15.2 21v-1.2"/><path d="M12 7.5v6M12 13.5l-1.1-1.2M12 13.5l1.1-1.2"/></svg></span>
-          <span class="menu-name">冰箱</span>
-          <span class="menu-sub">Fridge</span>
-        </button>
-        <button class="menu-item" type="button" data-menu="memory">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gMemory)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gMemory" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#F2DBA6"/><stop offset="1" stop-color="#B0893F"/></linearGradient></defs><path d="M12 3.5c.8 5 3.5 7.7 8.5 8.5-5 .8-7.7 3.5-8.5 8.5-.8-5-3.5-7.7-8.5-8.5 5-.8 7.7-3.5 8.5-8.5Z"/></svg></span>
-          <span class="menu-name">记忆</span>
-          <span class="menu-sub">Memory</span>
-        </button>
-        <button class="menu-item" type="button" data-menu="tides">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gTides)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gTides" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#93DDF4"/><stop offset="1" stop-color="#2E8CB8"/></linearGradient></defs><path d="M3 8.5c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/><path d="M3 13c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/><path d="M3 17.5c1.8-2.2 3.6-2.2 5.4 0s3.6 2.2 5.4 0 3.6-2.2 5.4 0"/></svg></span>
-          <span class="menu-name">潮汐</span>
-          <span class="menu-sub">Tides</span>
-        </button>
-        <button class="menu-item" type="button" data-menu="room">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gRoom)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gRoom" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#EEC4A8"/><stop offset="1" stop-color="#B07258"/></linearGradient></defs><path d="M5 21V9a7 7 0 0 1 14 0v12"/><path d="M4 21h16"/><circle cx="15" cy="13" r=".95" fill="url(#gRoom)" stroke="none"/></svg></span>
-          <span class="menu-name">房间</span>
-          <span class="menu-sub">Room</span>
-        </button>
-        <button class="menu-item" type="button" data-menu="cat">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gCat)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gCat" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#F5D3A4"/><stop offset="1" stop-color="#B97840"/></linearGradient></defs><path d="M5.5 9.2 4.6 4.2l3.9 2.4a8.6 8.6 0 0 1 7 0l3.9-2.4-.9 5A7.6 7.6 0 1 1 5.5 9.2Z"/><circle cx="9.4" cy="13" r=".75" fill="url(#gCat)" stroke="none"/><circle cx="14.6" cy="13" r=".75" fill="url(#gCat)" stroke="none"/><path d="M11 16.2c.6.5 1.4.5 2 0"/></svg></span>
-          <span class="menu-name">猫咪</span>
-          <span class="menu-sub">Cat</span>
-        </button>
-      </nav>
 
       <!-- footer -->
       <div class="menu-foot">in endless tides, we find each other.</div>
@@ -3169,7 +3296,7 @@
 
 /* ── identity / branding — the ONE place to set names + app title ── */
 const CONFIG = {
-  APP_NAME:   "Tidal Echo",  // app + menu title (and manifest, set there too)
+  APP_NAME:   "Motra",       // app + menu title (and manifest, set there too)
   AI_NAME:    "Claude",       // your AI companion's display name (header / call / push / narration)
   HUMAN_NAME: "你",           // how you're referred to in narration (rarely shown)
   SINCE:      "2026/01/01",   // "together since" date YYYY/MM/DD for the menu counter ("" hides it)
@@ -3349,9 +3476,7 @@ function applyIdentity(){
   setText(".incoming-call-title", AI_NAME + "来电");
   setText("#incomingCallText", AI_NAME + "想和你语音通话。");
   setAttr(".incoming-call-avatar", "aria-label", AI_NAME);
-  setText(".menu-title", APP_NAME);
-  const since = document.querySelector(".menu-since");
-  if (since) since.textContent = CONFIG.SINCE ? ("since " + CONFIG.SINCE) : "";
+  /* menu 页标题已移除（iOS 主屏风格布局），无需再设置 */
 }
 
 let profileCloseTimer = null;
@@ -3419,9 +3544,11 @@ function daysTogether(){
   return Math.max(0, Math.round((today - TOGETHER_START) / 86400000));   // midnight-safe, DST-proof
 }
 function refreshDays(){
-  const wrap = document.querySelector(".menu-days");
+  const wrap = document.querySelector(".widget-anniversary");
   if (!TOGETHER_START){ if (wrap) wrap.style.display = "none"; return; }
   if (menuDaysEl) menuDaysEl.textContent = daysTogether();
+  const sinceEl = $("#menuSince");
+  if (sinceEl) sinceEl.textContent = CONFIG.SINCE || "";
 }
 let menuCloseTimer = null;
 function openMenu(){
