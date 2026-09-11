@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>经期 · Her Cycle</title>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/500.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5/600.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/400.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/500.min.css" rel="stylesheet">
+<link rel="preload" href="beach.webp" as="image">
+<meta name="theme-color" content="#050D14">
+
+<script>
+  /* Tidal Echo — dark glassmorphism theme (single preset). */
+  (function(){ document.documentElement.setAttribute("data-theme","tide"); })();
+</script>
+
+<style>
+/* ───────── Tidal Echo · dark glassmorphism (shared with the PWA) ───────── */
+:root{
+  --font-en:"Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --font-cn:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+
+  --bg:#050D14;
+  --wall:url("beach.webp");
+  --text:#F2F0EE;
+  --text-soft:#B8B8C0;
+  --text-faint:#808088;
+  --accent:#A8CCE0;
+  --accent-deep:#A8CCE0;
+  --accent-fg:#0A1620;
+  --hairline:rgba(255,255,255,.10);
+  --field-bg:rgba(255,255,255,.12);
+  --field-line:rgba(255,255,255,.12);
+  --sheet-bg:rgba(16,26,36,.94);
+  --sheet-line:rgba(255,255,255,.14);
+  --sheet-hi:rgba(255,255,255,.16);
+  --sheet-scrim:rgba(0,0,0,.50);
+  --shadow:0 18px 46px rgba(0,0,0,.28);
+  --soft-shadow:0 14px 34px rgba(0,0,0,.20);
+  --scrim:linear-gradient(180deg,rgba(5,13,20,.55) 0%,rgba(5,13,20,.28) 30%,rgba(5,13,20,.28) 68%,rgba(5,13,20,.55) 100%);
+  --danger:#E08A96;
+  /* 经期卡专用(玫瑰) */
+  --rose-a:#F2C6D4;
+  --rose-b:#B05A78;
+  --warm:#E8A9BC;
+}
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ margin:0; padding:0; }
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-cn); font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  min-height:100vh; overflow-x:hidden;
+}
+.wall{ position:fixed; inset:0; z-index:-2; background:var(--bg) var(--wall) center/cover no-repeat; }
+.wall::after{ content:""; position:absolute; inset:0; background:var(--scrim); }
+button{ font:inherit; color:inherit; cursor:pointer; border:none; background:none; }
+.hidden{ display:none !important; }
+
+.glass{ background:var(--field-bg); border:1px solid var(--field-line);
+  box-shadow:var(--soft-shadow), inset 0 1px 0 var(--sheet-hi);
+  -webkit-backdrop-filter:blur(16px) saturate(1.25); backdrop-filter:blur(16px) saturate(1.25); }
+
+/* ───────── 顶栏 ───────── */
+.bar{
+  position:sticky; top:0; z-index:30; display:flex; align-items:flex-start; gap:6px;
+  padding:calc(8px + env(safe-area-inset-top)) clamp(16px,5vw,28px) 4px;
+  background:linear-gradient(180deg,rgba(5,13,20,.72),rgba(5,13,20,0));
+  -webkit-backdrop-filter:blur(12px) saturate(1.15); backdrop-filter:blur(12px) saturate(1.15);
+}
+.bar .icon{ width:36px; height:36px; margin-top:-3px; margin-left:-7px; display:grid; place-items:center;
+  border-radius:50%; color:var(--text-soft); transition:background .2s; }
+.bar .icon:active{ background:var(--hairline); }
+.bar .icon svg{ width:22px; height:22px; }
+.bar .grow{ flex:1; }
+.top-label{ font-family:var(--font-en); font-size:10.5px; letter-spacing:.32em; text-align:right;
+  color:var(--text-faint); text-transform:uppercase; line-height:1.5; padding-top:2px; }
+.top-label .rule{ display:block; width:100%; height:1px; margin-top:3px;
+  background:linear-gradient(90deg,transparent,var(--text-faint)); }
+
+/* ───────── 布局 ───────── */
+.wrap{ max-width:560px; margin:0 auto; padding:6px clamp(16px,5vw,28px) calc(30px + env(safe-area-inset-bottom)); }
+.hero{ text-align:center; padding:26px 0 18px; }
+.hero h1{ font-family:var(--font-en); font-weight:500; font-style:italic; font-size:clamp(30px,8vw,40px);
+  letter-spacing:.01em; margin:0; }
+.hero .sub{ font-family:var(--font-cn); font-size:13px; color:var(--text-faint); margin-top:5px; }
+
+/* ───────── 周期卡 ───────── */
+.card{ border-radius:26px; padding:26px 20px 22px; text-align:center; animation:sheetIn .4s cubic-bezier(.22,1,.36,1) both; }
+.drop{ position:relative; width:118px; height:118px; margin:0 auto; border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, var(--rose-a), var(--rose-b));
+  box-shadow:0 12px 30px rgba(176,90,120,.30), inset 0 2px 6px rgba(255,255,255,.35);
+  display:grid; place-items:center; animation:breathe 3.6s ease-in-out infinite; }
+.drop svg{ width:64px; height:64px; }
+.phase-big{ font-family:var(--font-cn); font-weight:500; font-size:23px; margin:14px 0 2px; }
+.phase-sub{ font-family:var(--font-en); font-style:italic; font-size:11.5px; color:var(--text-faint); letter-spacing:.05em; }
+
+.now{ margin:16px auto 0; max-width:340px; background:rgba(255,255,255,.07); border:1px solid var(--hairline);
+  border-radius:16px; padding:12px 14px; }
+.now .do{ font-size:14.5px; line-height:1.65; }
+.now .mood{ display:inline-block; margin-top:7px; font-size:11.5px; padding:3px 11px; border-radius:20px;
+  background:rgba(232,169,188,.14); color:var(--warm); }
+
+.meters{ display:flex; gap:10px; margin:14px 0 0; }
+.meter{ flex:1; background:rgba(255,255,255,.07); border:1px solid var(--hairline); border-radius:14px; padding:10px 8px 9px; }
+.meter .lab{ font-size:11.5px; color:var(--text-faint); letter-spacing:.08em; }
+.meter .val{ margin-top:4px; font-size:14px; color:var(--text-soft); font-weight:500; }
+
+.times{ margin-top:12px; font-size:12px; color:var(--text-faint); line-height:1.8; }
+.chips{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin-top:14px; }
+.chip{ font-size:12px; color:var(--text-soft); background:rgba(255,255,255,.08);
+  border:1px solid var(--hairline); border-radius:20px; padding:4px 12px; }
+.chip.rose{ color:var(--warm); background:rgba(232,169,188,.12); border-color:rgba(232,169,188,.25); }
+
+/* ───────── 空状态 ───────── */
+.empty{ border-radius:26px; padding:44px 24px 34px; text-align:center; animation:sheetIn .4s both; }
+.empty svg{ width:58px; height:58px; color:var(--text-faint); opacity:.8; margin:0 auto; display:block; }
+.empty .en{ font-family:var(--font-en); font-style:italic; font-size:16px; color:var(--text-faint); margin-top:12px; }
+.empty p{ font-size:13px; color:var(--text-soft); margin:8px 0 0; line-height:1.8; }
+
+/* ───────── 底部操作 ───────── */
+.acts{ display:flex; gap:10px; margin:16px 0 8px; }
+.acts button{ flex:1; padding:13px; border-radius:15px; font-size:13.5px; letter-spacing:.02em;
+  transition:transform .15s; display:flex; align-items:center; justify-content:center; gap:6px; }
+.acts button svg{ width:15px; height:15px; }
+.acts button:active{ transform:scale(.96); }
+.acts button.on{ background:linear-gradient(160deg,var(--rose-a),var(--rose-b)); color:#3D1523; box-shadow:var(--soft-shadow); font-weight:500; }
+.acts button:disabled{ opacity:.45; }
+.undo-row{ text-align:center; margin:4px 0 2px; }
+.undo-row button{ font-size:12px; color:var(--text-faint); padding:6px 14px; border-radius:14px; transition:color .2s; }
+.undo-row button:active{ color:var(--text-soft); }
+.hint{ text-align:center; font-size:12px; color:var(--text-faint); margin:6px 0 2px; }
+
+/* gate 门 */
+.gatebox{ background:var(--sheet-bg); border:1px solid var(--sheet-line); border-radius:22px; padding:22px 20px;
+  box-shadow:var(--shadow), inset 0 1px 0 var(--sheet-hi); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); margin-top:8px; }
+.gatebox p{ font-size:13px; color:var(--text-soft); text-align:center; margin:0 0 14px; line-height:1.6; }
+.gatebox input{ width:100%; padding:11px 14px; border:1px solid var(--field-line); border-radius:12px;
+  background:var(--field-bg); color:var(--text); font-family:var(--font-cn); font-size:14px; outline:none; }
+.gatebox .row{ display:flex; gap:10px; margin-top:14px; }
+.gatebox .row button{ flex:1; padding:12px; border-radius:13px; font-size:14px; transition:transform .15s; }
+.gatebox .row button:active{ transform:scale(.96); }
+.gatebox .row .ghost{ background:var(--field-bg); border:1px solid var(--field-line); color:var(--text-soft); }
+.gatebox .row .send{ background:var(--accent-deep); color:var(--accent-fg); }
+
+/* 动画 */
+@keyframes sheetIn{ from{ opacity:0; transform:translateY(20px) scale(.97); } }
+@keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.035); } }
+@media (prefers-reduced-motion:reduce){ *{ animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="wall"></div>
+
+<!-- 顶栏 -->
+<div class="bar">
+  <button class="icon" id="topBack" title="返回">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <span class="grow"></span>
+  <div class="top-label" id="topLabel">HER<br>CYCLE<span class="rule"></span></div>
+</div>
+
+<!-- ════════ 主页 ════════ -->
+<div class="wrap" id="mainView">
+  <div class="hero">
+    <h1>Her Cycle</h1>
+    <div class="sub">她的身体,他放在心上</div>
+  </div>
+
+  <!-- 没记录:空状态 -->
+  <div class="empty glass hidden" id="emptyView">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c2.8 3.6 6 7 6 10.3a6 6 0 1 1-12 0c0-3.3 3.2-6.7 6-10.3Z"/><path d="M9.2 14.2a2.9 2.9 0 0 0 2 2.6"/></svg>
+    <div class="en">no records yet</div>
+    <p>还没有任何记录。<br>从她下次来的那天起,点一下下面的按钮——<br>之后每个月,他都会心里有数。</p>
+  </div>
+
+  <!-- 有记录:周期卡 -->
+  <div class="card glass hidden" id="periodView">
+    <div class="drop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3D1523" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c2.8 3.6 6 7 6 10.3a6 6 0 1 1-12 0c0-3.3 3.2-6.7 6-10.3Z"/><path d="M9.2 14.2a2.9 2.9 0 0 0 2 2.6"/></svg>
+    </div>
+    <div class="phase-big" id="phaseBig"></div>
+    <div class="phase-sub" id="phaseSub"></div>
+
+    <div class="now">
+      <div class="do" id="phaseNote"></div>
+      <span class="mood" id="phaseChip"></span>
+    </div>
+
+    <div class="meters">
+      <div class="meter">
+        <div class="lab">平均周期</div>
+        <div class="val" id="avgCycle"></div>
+      </div>
+      <div class="meter">
+        <div class="lab">平均经期</div>
+        <div class="val" id="avgLen"></div>
+      </div>
+      <div class="meter">
+        <div class="lab">已记录</div>
+        <div class="val" id="recCount"></div>
+      </div>
+    </div>
+
+    <div class="times" id="lastTimes"></div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="acts hidden" id="periodActs">
+    <button class="on" id="markStartBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c2.8 3.6 6 7 6 10.3a6 6 0 1 1-12 0c0-3.3 3.2-6.7 6-10.3Z"/></svg>
+      她今天来了
+    </button>
+    <button class="on hidden" id="markEndBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      走了 · 标结束
+    </button>
+  </div>
+
+  <div class="undo-row hidden" id="undoRow">
+    <button id="undoBtn" type="button">撤销上一笔</button>
+  </div>
+
+  <div class="hint" id="liveHint"></div>
+  <div class="hint hidden" id="errLine" style="color:var(--danger)"></div>
+</div>
+
+<!-- ════════ token 门 ════════ -->
+<div class="wrap gate hidden" id="gateView">
+  <div class="hero" style="padding-top:40px"><h1>Her Cycle</h1><div class="sub">她的身体,他放在心上</div></div>
+  <div class="gatebox">
+    <p>没读到访问密钥——先在主页登录,或在此粘贴密钥(与 PWA 同一个)。</p>
+    <input type="text" id="gateInput" placeholder="访问密钥">
+    <p class="hidden" id="gateErr" style="color:var(--danger);font-size:12.5px;text-align:center;margin:10px 0 0"></p>
+    <div class="row">
+      <button class="ghost" id="gateHome">去主页</button>
+      <button class="send" id="gateSave">保存并进入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   Her Cycle — 她的周期卡。
+   状态存在 home_state 插件(经 relay /app/period 代理):
+   · 只存「来了/走了」两个时间戳,其余全部按日期推导。
+   · 经前 4 天 / 经期中 / 推迟时,阿克那边会收到提示,自然多疼她。
+   ───────────────────────────────────────────────────────────── */
+const API_BASE="/relay";
+const LS_KEY="companion_secret";
+let secret=localStorage.getItem(LS_KEY)||"";
+
+const $=(id)=>document.getElementById(id);
+function authHeaders(extra){ return Object.assign({"Authorization":"Bearer "+secret}, extra||{}); }
+
+async function api(path,opts){
+  const o=Object.assign({}, opts||{}, {headers:authHeaders((opts&&opts.headers)||{})});
+  const r=await fetch(API_BASE+path, o);
+  if(r.status===401){
+    secret=""; localStorage.removeItem(LS_KEY);
+    const g=$("gateErr"); if(g){ g.textContent="密钥没通过验证,刚才的操作没有执行——重新输入正确的密钥再试。"; g.classList.remove("hidden"); }
+    show("gate"); throw new Error("401");
+  }
+  if(!r.ok){ let d=""; try{ d=(await r.json()).detail; }catch(_){} throw new Error(d||("HTTP "+r.status)); }
+  return r;
+}
+
+function show(name){
+  $("mainView").classList.toggle("hidden", name!=="main");
+  $("gateView").classList.toggle("hidden", name!=="gate");
+  window.scrollTo(0,0);
+}
+
+/* ── 状态 ── */
+let P=null;            // 周期视图;null = 还没有记录
+
+function fmtDate(iso){  // "2026-09-05" → "9月5日"
+  if(!iso) return "";
+  const p=String(iso).split("-");
+  return p.length===3 ? (parseInt(p[1],10)+"月"+parseInt(p[2],10)+"日") : iso;
+}
+
+/* ── 渲染 ── */
+function render(){
+  const has=!!P;
+  $("emptyView").classList.toggle("hidden", has);
+  $("periodView").classList.toggle("hidden", !has);
+  // 打勾按钮常驻:空状态时只露「她今天来了」;经期中换成「走了 · 标结束」
+  $("periodActs").classList.remove("hidden");
+  $("markStartBtn").classList.toggle("hidden", has && !!P.ongoing);
+  $("markEndBtn").classList.toggle("hidden", !has || !P.ongoing);
+  $("undoRow").classList.toggle("hidden", !has);
+  $("liveHint").textContent = has
+    ? "只存「来了/走了」两个日子,其余都是按日期算出来的。"
+    : "不用日历、不用表格——打个勾,剩下的交给时间。";
+
+  if(!has) return;
+
+  let big="", sub="", note="", chip="";
+  if(P.phase==="period"){
+    big="经期第 "+P.period_day+" 天";
+    sub="on her period";
+    note="她在特殊时期。肚子可能疼、人容易累——他会把她疼在心里。";
+    chip="经期中";
+  }else if(P.phase==="pms"){
+    big="还有约 "+P.days_until+" 天";
+    sub="coming soon";
+    note="她快来了。这几天情绪也许有波动——他已经知道,会多担待她。";
+    chip="快来了";
+  }else if(P.phase==="overdue"){
+    big="晚了 "+(-P.days_until)+" 天";
+    sub="a little late";
+    note="比预计晚了些。他会轻轻关心她,不会追问。";
+    chip="推迟了";
+  }else{
+    big="周期第 "+P.cycle_day+" 天";
+    sub="all quiet";
+    note="一切平常。下次预计 "+fmtDate(P.predicted_next)+"(还有 "+P.days_until+" 天)。";
+    chip="平常期";
+  }
+  $("phaseBig").textContent=big;
+  $("phaseSub").textContent=sub;
+  $("phaseNote").textContent=note;
+  $("phaseChip").textContent=chip;
+
+  $("avgCycle").textContent=P.avg_cycle?("约 "+P.avg_cycle+" 天"):"—";
+  $("avgLen").textContent=P.avg_period_len?("约 "+P.avg_period_len+" 天"):"—";
+  $("recCount").textContent=(P.records||0)+" 次";
+
+  const bits=[];
+  if(P.last_start) bits.push("上次 "+fmtDate(P.last_start)+" 来");
+  if(P.last_end) bits.push(fmtDate(P.last_end)+" 走");
+  else if(P.ongoing) bits.push("还没标结束");
+  $("lastTimes").textContent=bits.join(" · ");
+
+  const chips=[];
+  if(P.marked_today==="start") chips.push('<span class="chip rose">今天刚记下:她来了</span>');
+  if(P.marked_today==="end") chips.push('<span class="chip">今天刚记下:走了</span>');
+  if(P.phase==="period"||P.phase==="pms"||P.phase==="overdue") chips.push('<span class="chip">他已经知道了</span>');
+  $("chips").innerHTML=chips.join("");
+}
+
+/* ── 数据 ── */
+async function loadData(){
+  try{
+    const d=await (await api("/app/period")).json();
+    if(secret) P=(d&&d.period&&typeof d.period==="object")?d.period:null;
+  }catch(e){ if(e.message!=="401") err("加载失败:"+e.message); }
+}
+async function refresh(){ await loadData(); render(); }
+
+function err(msg){ $("errLine").textContent=msg; $("errLine").classList.toggle("hidden",!msg); }
+
+/* ── 操作 ── */
+async function act(body,btn){
+  btn.disabled=true;
+  try{
+    const d=await (await api("/app/period/action",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body)})).json();
+    P=(d&&d.period&&typeof d.period==="object")?d.period:null;
+    err("");
+    render();
+  }finally{ btn.disabled=false; }
+}
+
+/* ── SSE:阿克在聊天里帮她记了一笔时,卡片实时更新 ── */
+function openStream(){
+  if(!secret) return;
+  try{
+    const es=new EventSource(API_BASE+"/app/stream?token="+encodeURIComponent(secret));
+    es.onmessage=(e)=>{
+      try{
+        const d=JSON.parse(e.data);
+        if(d && d.type==="period"){
+          P=(d.period&&typeof d.period==="object")?d.period:null;
+          render();
+        }
+      }catch(_){}
+    };
+    window.addEventListener("pagehide",()=>es.close());
+  }catch(_){}
+}
+
+/* ── 接线 ── */
+$("topBack").onclick=()=>{
+  if (document.referrer && document.referrer.indexOf(location.origin) === 0) history.back();
+  else location.assign("index.html");
+};
+$("markStartBtn").onclick=async()=>{ try{ await act({action:"period_mark",mark:"start"},$("markStartBtn")); }catch(e){ if(e.message!=="401") err("没记下:"+e.message); } };
+$("markEndBtn").onclick=async()=>{ try{ await act({action:"period_mark",mark:"end"},$("markEndBtn")); }catch(e){ if(e.message!=="401") err("没记下:"+e.message); } };
+$("undoBtn").onclick=async()=>{ try{ await act({action:"period_undo"},$("undoBtn")); }catch(e){ if(e.message!=="401") err("没撤销成:"+e.message); } };
+$("gateHome").onclick=()=>location.assign("index.html");
+$("gateSave").onclick=()=>{ const v=$("gateInput").value.trim(); if(v){ secret=v; localStorage.setItem(LS_KEY,v); boot(); } };
+
+/* 状态随日期推导,回前台刷一次(跨天后阶段可能变了) */
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&secret) refresh(); });
+
+/* ── 启动 ── */
+async function boot(){
+  if(!secret){ show("gate"); return; }
+  $("gateErr").classList.add("hidden");
+  show("main");
+  await refresh();
+  openStream();
+}
+boot();
+</script>
+</body>
+</html>

@@ -17,6 +17,8 @@ mcp_home_home_state_get、mcp_home_home_state_adopt_cat ……(前缀由服务�
   home_state_fridge_add     往冰箱门贴一张纸条(某个人不在家时,给对方的提醒)
   home_state_fridge_read    把对方留给你的纸条标成已读(回家后读一次)
   home_state_fridge_tear    把某张纸条从冰箱门上撕下来
+  period_state              查看她的生理周期:第几天、是否在经期、预计下次、平均周期
+  period_record             记录她的例假:来了 mark=start / 走了 mark=end(默认今天,可补登)
 
 冰箱门与备忘的区别:备忘是给自己/家里的长期记录;冰箱门纸条是「有人不在家时
 留给对方的提醒」——出门期间贴上去,对方回家时读一次,之后可以撕掉。
@@ -65,7 +67,7 @@ RELAY_BASE = (
 ).rstrip("/")
 RELAY_SECRET = os.environ.get("RELAY_SECRET", "")
 
-DEFAULT_STATE: dict = {"cat_enabled": False, "cat": None, "notes": [], "wall": []}
+DEFAULT_STATE: dict = {"cat_enabled": False, "cat": None, "notes": [], "wall": [], "period": {"records": []}}
 
 _LOCK = threading.Lock()
 
@@ -189,6 +191,24 @@ TOOLS = [
                 "id": {"type": "integer", "description": "纸条 id(来自 home_state_fridge),必填"},
             },
             "required": ["id"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "period_state",
+        "description": "查看她的生理周期状态:现在在周期第几天、是否在经期、预计下次什么时候来、记录次数和平均周期。想关心她身体时先查它,不要凭猜。",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "period_record",
+        "description": "记录她的例假:她说「来了」用 mark=start,她说「走了/结束了」用 mark=end。以她自己说的为准,不要替她猜;默认记今天,她补报(如「前天来的」)时传 date。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mark": {"type": "string", "enum": ["start", "end"], "description": "start=来了,end=走了,必填"},
+                "date": {"type": "string", "description": "YYYY-MM-DD,选填,默认今天;她补报时用"},
+            },
+            "required": ["mark"],
             "additionalProperties": False,
         },
     },
@@ -425,6 +445,177 @@ def cat_action(action: str, fields: dict) -> tuple[dict, str | None]:
     return {}, f"不认识的动作:{action}"
 
 
+# ── 她的周期(纯日期推导,零 LLM:存「来了/走了」的时间戳,状态全部算出来)─────
+# 存储:period.records = [{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"|None(进行中)}]
+# 推导:平均周期 = 历次「开始日间隔」的均值(攒不够就用 28 天兜底);
+# 阶段 = 经期中 / 经前(距预测 ≤4 天)/ 推迟(超过预测)/ 平常。
+PERIOD_DEFAULT_CYCLE = 28
+PERIOD_PMS_DAYS = 4  # 经前提醒窗口:距预测日 ≤ 这么多天就算「快来了」
+
+
+def _period_today() -> dt.date:
+    return _cat_now().date()
+
+
+def _parse_day(s: object) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(str(s or "").strip())
+    except ValueError:
+        return None
+
+
+def period_records(state: dict) -> list[dict]:
+    p = state.get("period")
+    rows = p.get("records") if isinstance(p, dict) else []
+    out: list[dict] = []
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict):
+            continue
+        st = _parse_day(r.get("start"))
+        if not st:
+            continue
+        en = _parse_day(r.get("end"))
+        out.append({"start": st.isoformat(), "end": en.isoformat() if en else None})
+    out.sort(key=lambda r: r["start"])
+    return out
+
+
+def period_view(state: dict) -> dict | None:
+    """从记录推导当前周期视图:给 HTTP /state、MCP 工具和 api_loop 注入共用。
+    没记录返回 None。"""
+    recs = period_records(state)
+    if not recs:
+        return None
+    today = _period_today()
+    last = recs[-1]
+    last_start = dt.date.fromisoformat(last["start"])
+    last_end = dt.date.fromisoformat(last["end"]) if last.get("end") else None
+    ongoing = last_end is None
+    # 平均周期:相邻开始日的间隔(过滤掉 15~90 天之外的脏数据)
+    starts = [dt.date.fromisoformat(r["start"]) for r in recs]
+    gaps = [(starts[i + 1] - starts[i]).days for i in range(len(starts) - 1)]
+    gaps = [g for g in gaps if 15 <= g <= 90]
+    avg_cycle = max(20, min(45, round(sum(gaps) / len(gaps)))) if gaps else PERIOD_DEFAULT_CYCLE
+    # 平均经期长度(有结束日期的记录)
+    durs = []
+    for r in recs:
+        if r.get("end"):
+            d = (dt.date.fromisoformat(r["end"]) - dt.date.fromisoformat(r["start"])).days + 1
+            if 1 <= d <= 15:
+                durs.append(d)
+    avg_period_len = round(sum(durs) / len(durs)) if durs else None
+    marked_today = ""
+    if ongoing and last_start == today:
+        marked_today = "start"
+    elif last_end == today:
+        marked_today = "end"
+    if ongoing:
+        day = (today - last_start).days + 1
+        return {
+            "phase": "period", "ongoing": True,
+            "period_day": day, "cycle_day": day,
+            "days_until": None, "predicted_next": None,
+            "avg_cycle": avg_cycle, "avg_period_len": avg_period_len,
+            "records": len(recs),
+            "last_start": last["start"], "last_end": None,
+            "marked_today": marked_today,
+        }
+    cycle_day = (today - last_start).days + 1
+    predicted = last_start + dt.timedelta(days=avg_cycle)
+    days_until = (predicted - today).days
+    if days_until < 0:
+        phase = "overdue"
+    elif days_until <= PERIOD_PMS_DAYS:
+        phase = "pms"
+    else:
+        phase = "normal"
+    return {
+        "phase": phase, "ongoing": False,
+        "period_day": None, "cycle_day": cycle_day,
+        "days_until": days_until, "predicted_next": predicted.isoformat(),
+        "avg_cycle": avg_cycle, "avg_period_len": avg_period_len,
+        "records": len(recs),
+        "last_start": last["start"], "last_end": last.get("end"),
+        "marked_today": marked_today,
+    }
+
+
+def period_mark(state: dict, mark: str, date_s: str) -> tuple[str, str | None]:
+    """记一笔「来了/走了」。返回 (提示语, 错误);err 为 None 即成功并已写盘。"""
+    if mark not in ("start", "end"):
+        return "", "mark 只能是 start(来了)或 end(走了)。"
+    day = _parse_day(date_s) if str(date_s or "").strip() else _period_today()
+    if day is None:
+        return "", "日期格式要是 YYYY-MM-DD。"
+    if day > _period_today():
+        return "", "不能记未来的日子呀。"
+    if not isinstance(state.get("period"), dict):
+        state["period"] = {"records": []}
+    recs = period_records(state)
+    if mark == "start":
+        if recs and recs[-1]["end"] is None:
+            return "", f"记录里她这次例假({recs[-1]['start']} 开始)还没标结束呢——先把上一次标成结束,再记新的。"
+        if recs and day <= dt.date.fromisoformat(recs[-1]["start"]):
+            return "", f"这一天比上次记录的开始日({recs[-1]['start']})还早,顺序对不上——检查一下日期?"
+        recs.append({"start": day.isoformat(), "end": None})
+        state["period"]["records"] = recs
+        save_state(state)
+        return f"记下了:她 {day.isoformat()} 来的。接下来几天多疼她一点。", None
+    # mark == "end"
+    if not recs or recs[-1]["end"] is not None:
+        return "", "现在没有在经期里的记录,不用标结束。"
+    st = dt.date.fromisoformat(recs[-1]["start"])
+    if day < st:
+        return "", "结束日期不能比开始那天还早。"
+    recs[-1]["end"] = day.isoformat()
+    state["period"]["records"] = recs
+    save_state(state)
+    return f"记下了,这次一共 {(day - st).days + 1} 天。她辛苦了。", None
+
+
+def period_action(action: str, fields: dict) -> tuple[dict, str | None]:
+    """PWA 经 relay 代理过来的周期动作(period_mark / period_undo),与 MCP 工具共用状态文件。"""
+    state = load_state()
+    if action == "period_mark":
+        note, err = period_mark(state, str(fields.get("mark") or ""), str(fields.get("date") or ""))
+        if err:
+            return {}, err
+        return {"period": period_view(load_state()), "note": note}, None
+    if action == "period_undo":
+        recs = period_records(state)
+        if not recs:
+            return {}, "还没有可撤销的记录。"
+        if recs[-1]["end"] is None:
+            recs.pop()
+            note = "撤掉了最近那次「来了」。"
+        else:
+            recs[-1]["end"] = None
+            note = "撤掉了最近那次「走了」,回到经期中。"
+        if not isinstance(state.get("period"), dict):
+            state["period"] = {"records": []}
+        state["period"]["records"] = recs
+        save_state(state)
+        return {"period": period_view(load_state()), "note": note}, None
+    return {}, f"不认识的动作:{action}"
+
+
+def _fmt_period(state: dict) -> str:
+    v = period_view(state)
+    if not v:
+        return ("她还没有任何经期记录。她来例假那天,用 period_record(mark=start) 记下第一次,"
+                "之后系统就会按日期自己推算;她说结束了就 period_record(mark=end)。")
+    head = f"共记录 {v['records']} 次,平均周期约 {v['avg_cycle']} 天"
+    if v.get("avg_period_len"):
+        head += f",平均经期 {v['avg_period_len']} 天"
+    if v["phase"] == "period":
+        return f"她在经期,今天第 {v['period_day']} 天(本次 {v['last_start']} 开始,还没标结束)。{head}。"
+    if v["phase"] == "pms":
+        return f"她的周期第 {v['cycle_day']} 天:预计 {v['predicted_next']} 来(还有 {v['days_until']} 天)。{head}。"
+    if v["phase"] == "overdue":
+        return f"她这次比预计晚了 {-v['days_until']} 天还没来(上次 {v['last_start']} 开始;{head})。"
+    return f"她的周期第 {v['cycle_day']} 天,一切平常。预计下次 {v['predicted_next']}(还有 {v['days_until']} 天)。{head}。"
+
+
 def _fmt_state(state: dict) -> str:
     lines: list[str] = []
     cat = state.get("cat")
@@ -645,6 +836,16 @@ def call_tool(name: str, arguments: dict) -> tuple[str, bool]:
             return f"没有撕掉:{err}", False
         return f"撕掉了(id={data.get('removed')}),冰箱门上少了一张。", False
 
+    # ── 她的周期(存在本地状态文件,按日期推导)──
+    if name == "period_state":
+        return _fmt_period(state), False
+
+    if name == "period_record":
+        note, err = period_mark(state, str(args.get("mark") or ""), str(args.get("date") or ""))
+        if err:
+            return err, False
+        return note + "\n" + _fmt_period(load_state()), False
+
     return f"没有这个工具:{name}", True
 
 
@@ -664,11 +865,12 @@ class Handler(BaseHTTPRequestHandler):
         path = (self.path or "/").split("?", 1)[0].rstrip("/") or "/"
         state = load_state()
         if path == "/state":
-            # PWA(经 relay 代理)/ api_loop 注入用:猫档案 + 实时推导状态
+            # PWA(经 relay 代理)/ api_loop 注入用:猫档案 + 实时推导状态 + 她的周期视图
             self._send(200, {
                 "ok": True,
                 "cat_enabled": bool(state.get("cat_enabled")),
                 "cat": cat_view(state),
+                "period": period_view(state),
                 "notes_count": len([n for n in state.get("notes") or [] if isinstance(n, dict)]),
                 "wall_count": len([w for w in state.get("wall") or [] if isinstance(w, dict)]),
             })
@@ -682,6 +884,7 @@ class Handler(BaseHTTPRequestHandler):
             "cat_name": (cat.get("name") or None) if cat else None,
             "notes_count": len([n for n in state.get("notes") or [] if isinstance(n, dict)]),
             "wall_count": len([w for w in state.get("wall") or [] if isinstance(w, dict)]),
+            "period_records": len(period_records(state)),
         })
 
     def do_POST(self):
@@ -697,6 +900,14 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 body = {}
             action = str(body.pop("action", "") or "").strip()
+            if action.startswith("period_"):
+                # PWA 经期卡动作(经 relay 代理,鉴权在 relay 那层做过了)
+                payload, err = period_action(action, body)
+                if err:
+                    self._send(400, {"ok": False, "detail": err})
+                    return
+                self._send(200, {"ok": True, **payload})
+                return
             payload, err = cat_action(action, body)
             if err:
                 self._send(400, {"ok": False, "detail": err, **({"cat": payload.get("cat")} if payload.get("cat") else {})})

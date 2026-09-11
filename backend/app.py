@@ -1197,6 +1197,28 @@ async def cat_action(request: Request):
     return data
 
 
+# ---- her cycle (period card — same home_state plugin, date-derived) ---------
+
+@app.get("/app/period")
+async def period_get(request: Request):
+    """Her cycle view (phase / predicted next / averages), for the PWA period card."""
+    check_auth(request)
+    return await _home_http_async("/state")
+
+
+@app.post("/app/period/action")
+async def period_action(request: Request):
+    """period_mark / period_undo — proxied to the plugin; broadcasts a 'period' event."""
+    check_auth(request)
+    body = await request.json()
+    data = await _home_http_async("/action", method="POST", body=body if isinstance(body, dict) else {})
+    await broadcast(app_subs, {
+        "type": "period",
+        "period": data.get("period"),
+    })
+    return data
+
+
 @app.get("/app/stream")
 async def app_stream(request: Request):
     """SSE stream the PWA holds open while foregrounded. The AI's messages arrive here."""

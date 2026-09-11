@@ -1791,7 +1791,7 @@
     filter: drop-shadow(0 -1px 0 rgba(255,255,255,.55)) drop-shadow(0 1.5px 1px rgba(5,20,35,.30));
   }
   .menu-item[data-menu="chat"]   .menu-ic{ color:#3D8DB6; }
-  .menu-item[data-menu="movie"]  .menu-ic{ color:#7A8BC4; }
+  .menu-item[data-menu="period"] .menu-ic{ color:#C87A92; }
   .menu-item[data-menu="fridge"] .menu-ic{ color:#5FB394; }
   .menu-item[data-menu="memory"] .menu-ic{ color:#C29A59; }
   .menu-item[data-menu="tides"]  .menu-ic{ color:#3E9CC8; }
@@ -3011,10 +3011,10 @@
           <span class="menu-name">聊天</span>
           <span class="menu-sub">Chat</span>
         </button>
-        <button class="menu-item" type="button" data-menu="movie">
-          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gMovie)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gMovie" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#B7BFE8"/><stop offset="1" stop-color="#5667B0"/></linearGradient></defs><rect x="3" y="5" width="18" height="14" rx="2.4"/><path d="M7.5 5v14M16.5 5v14M3 9.5h4.5M3 14.5h4.5M16.5 9.5H21M16.5 14.5H21"/></svg></span>
-          <span class="menu-name">电影</span>
-          <span class="menu-sub">Movie</span>
+        <button class="menu-item" type="button" data-menu="period">
+          <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gPeriod)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gPeriod" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#F2C6D4"/><stop offset="1" stop-color="#B05A78"/></linearGradient></defs><path d="M12 3.5c2.8 3.6 6 7 6 10.3a6 6 0 1 1-12 0c0-3.3 3.2-6.7 6-10.3Z"/><path d="M9.2 14.2a2.9 2.9 0 0 0 2 2.6"/></svg></span>
+          <span class="menu-name">经期</span>
+          <span class="menu-sub">Cycle</span>
         </button>
         <button class="menu-item" type="button" data-menu="fridge">
           <span class="menu-ic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#gFridge)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gFridge" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#9FE4C8"/><stop offset="1" stop-color="#3B9A78"/></linearGradient></defs><rect x="4.2" y="3" width="15.6" height="18" rx="2"/><path d="M8.8 3v1.2M15.2 3v1.2M8.8 21v-1.2M15.2 21v-1.2"/><path d="M12 7.5v6M12 13.5l-1.1-1.2M12 13.5l1.1-1.2"/></svg></span>
@@ -3446,6 +3446,7 @@ if (menuPanel){
     if (item.dataset.menu === "chat") closeMenu();       // back to chat
     else if (item.dataset.menu === "fridge") location.assign("fridge.html");  // 冰箱门便利贴(数据在 relay)
     else if (item.dataset.menu === "cat") location.assign("cat.html");        // 电子宠物猫卡(数据在 home_state 插件,经 relay 代理)
+    else if (item.dataset.menu === "period") location.assign("period.html");  // 她的周期卡(来了/走了打个勾,状态按日期推导)
     else if (item.dataset.menu === "memory") location.assign("memory.html");  // 记忆仓库:中间页 → 跳 OB dashboard
     else if (item.dataset.menu === "room"){ closeMenu(); openRoomPanel(); loadRoomConfig(); }  // 主菜单 → 独立的房间设置页（干净：无头像/主题）
     else showToast("即将开放");                           // placeholder items

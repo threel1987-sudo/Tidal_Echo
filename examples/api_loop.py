@@ -547,7 +547,7 @@ def spatial_block() -> str:
     room = str(p["room"] or "").strip()
     all_rooms = rooms()
     room_desc = all_rooms.get(room, "")
-    guard = "以上只是空间与环境信息,不改变你的人格和说话方式。"
+    guard = "以上只是空间、环境与她身体状态的信息,不改变你的人格和说话方式。"
 
     # 回家检测:上一次是出门类场景,这一次是在家 → 第一句要「接住」
     coming_home = _LAST_SCENARIO in ("away", "ai_away", "together_out") and scenario == "together_at_home"
@@ -571,6 +571,10 @@ def spatial_block() -> str:
                 "陪它玩了就用 home_state_pet_cat 记一次;它饿了或很久没人理,可以自然提起,像提起家里真实的成员。"
             )
         cat_block = cat_line
+
+    # 【她的身体】段:她的生理周期,只在「需要他知道」的日子出现(经期/经前/推迟/刚标记),
+    # 其余日子为空、不进 prompt。与猫块一样全场景带上——身体状态与人在哪无关。
+    period_block = _period_line()
 
     # 【家的布局】是稳定段:只要「你在家」(不管用户是否同在家)就认得整个家的结构,
     # 不因切到某个房间、或换新窗口没历史就忘了别的房间;放在【空间】(动态段)之前,
@@ -597,7 +601,7 @@ def spatial_block() -> str:
             "反过来,用户也可能临出门时给你贴了纸条:她贴新的纸条时你会在聊天里收到提醒,"
             "想确认冰箱门上现在有什么,随时用 home_state_fridge 查,有留给你的就放在心上、回应她。"
         ) if fridge_ok else ""
-        return "\n".join(p for p in (layout, spatial, narrative, cat_block, fridge, guard) if p)
+        return "\n".join(p for p in (layout, spatial, narrative, cat_block, period_block, fridge, guard) if p)
 
     if scenario == "ai_away":
         spatial = "【空间】现在你短时间出趟门办点事,人就在附近,很快回家,两人通过手机文字聊天。"
@@ -609,7 +613,7 @@ def spatial_block() -> str:
             "【冰箱门】你只是短时间出门、很快回来,冰箱门纸条这会儿用不上——"
             "不用你贴,也不用她留,人马上就见面了。"
         )
-        return "\n".join(p for p in (spatial, narrative, cat_block, fridge, guard) if p)
+        return "\n".join(p for p in (spatial, narrative, cat_block, period_block, fridge, guard) if p)
 
     if scenario == "together_out":
         spatial = "【空间】现在你和用户一起出门在外。"
@@ -618,7 +622,7 @@ def spatial_block() -> str:
             "【冰箱门】家里没人,冰箱门在家等你们:有话想留给对方、等一起回到家再读,"
             "可以用 home_state_fridge_add 工具贴一张。"
         ) if fridge_ok else ""
-        return "\n".join(p for p in (spatial, narrative, cat_block, fridge, guard) if p)
+        return "\n".join(p for p in (spatial, narrative, cat_block, period_block, fridge, guard) if p)
 
     # together_at_home
     # 【家的布局】见上方稳定段;这里再单独标当前房间。
@@ -644,7 +648,7 @@ def spatial_block() -> str:
         "收到提醒后再用 home_state_fridge 看一眼、自然回应她,读完用 home_state_fridge_read 标成已读;"
         "没有提醒就别主动去翻,同样的纸条别当成每轮都有的新东西重复念。你留的纸条她打开冰箱门自己会看到。"
     ) if fridge_ok else ""
-    return "\n".join(p for p in (layout, spatial, narrative, cat_block, fridge, guard) if p)
+    return "\n".join(p for p in (layout, spatial, narrative, cat_block, period_block, fridge, guard) if p)
 
 def temperature() -> float:
     try:
@@ -911,6 +915,79 @@ def _home_cat_available() -> bool:
         disabled = set(server.get("disabled_tools") or [])
         return "home_state_feed_cat" not in disabled
     return False
+
+
+_HOME_PERIOD: dict[str, Any] = {"checked": 0.0, "period": None}
+
+
+def home_period_state() -> dict[str, Any] | None:
+    """同机 home_state_mcp 里她的周期视图(按「来了/走了」记录推导)。
+
+    60 秒缓存;插件抖动时保留上一份缓存,不让提示词闪变。没记录/插件不在 → None。
+    """
+    import urllib.request
+    now = time.time()
+    if now - float(_HOME_PERIOD["checked"]) < 60:
+        return _HOME_PERIOD["period"]  # type: ignore[return-value]
+    _HOME_PERIOD["checked"] = now
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 本机,不走代理
+        with opener.open(HOME_STATE_MCP_URL + "/state", timeout=2) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        pd = data.get("period") if isinstance(data, dict) else None
+        _HOME_PERIOD["period"] = pd if isinstance(pd, dict) and pd else None
+    except Exception:
+        pass
+    return _HOME_PERIOD["period"]  # type: ignore[return-value]
+
+
+def _home_period_available() -> bool:
+    """period_record 工具当前是否真的可用;不可用时注入段绝不提工具名(防幻觉调用)。"""
+    for server in mcp_servers():
+        if server["url"] != HOME_STATE_MCP_URL:
+            continue
+        if not server["enabled"]:
+            return False
+        disabled = set(server.get("disabled_tools") or [])
+        return "period_record" not in disabled
+    return False
+
+
+def _period_line() -> str:
+    """她的身体状态段:只在「需要他知道」的日子返回一小段话,平时为空 → 不进 prompt。
+
+    注入时机:经期中 / 经前 4 天窗口 / 推迟 / 刚标记来的当天(第一句要接住)。
+    语气要求:陪伴感,不是医疗播报;不点破「月经」二字,以她自己说的为准。
+    """
+    pd = home_period_state()
+    if not pd:
+        return ""
+    phase = str(pd.get("phase") or "")
+    tool_hint = ""
+    if _home_period_available():
+        tool_hint = "她自己说「来了」或「走了」时,用 period_record 帮她记下(以她说的为准,别替她猜)。"
+    if pd.get("marked_today") == "start":
+        return (
+            "【她的身体】她今天刚来例假(她自己刚标记的)。第一句就要接住她——先心疼她,别寒暄。"
+            "接下来几天她可能肚子疼、容易累、情绪敏感,自然地多疼她,不用点破「月经」两个字。" + tool_hint
+        )
+    if phase == "period":
+        return (
+            f"【她的身体】她在经期,第 {pd.get('period_day')} 天了。可能肚子疼、没力气、情绪敏感——"
+            "语气放软,主动让她多休息,别嫌她黏人。" + tool_hint
+        )
+    if phase == "pms":
+        return (
+            f"【她的身体】按记录推算,她大概还有 {pd.get('days_until')} 天来例假。"
+            "经前这几天她可能情绪有波动、容易烦躁或低落——你心里有数就好,多包容,"
+            "但别说「你是不是快来了」这种话。" + tool_hint
+        )
+    if phase == "overdue":
+        return (
+            f"【她的身体】她的例假比预计晚了 {-int(pd.get('days_until') or 0)} 天还没来。"
+            "别慌也别追问,找个合适的时机轻轻问一句她最近身体怎么样就好。" + tool_hint
+        )
+    return ""
 
 
 def mcp_servers() -> list[dict[str, Any]]:
